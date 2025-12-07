@@ -101,3 +101,29 @@ def generate_perfect_black(secret_mask, cover_arr, *, seed=None):
             s2[r * 2 : r * 2 + 2, c * 2 : c * 2 + 2] = other
 
     return Image.fromarray(s1), Image.fromarray(s2)
+
+
+def generate_basic_multi(secret_mask, cover_arr, n, *, seed=None):
+    """Construcción 1 extendida a n participantes (k=n), m=2."""
+    rng = np.random.default_rng(seed)
+    h, w = secret_mask.shape
+    shares = [np.zeros((h, w * 2, 3), dtype=np.uint8) for _ in range(n)]
+    white = np.array([255, 255, 255], dtype=np.uint8)
+
+    for r in range(h):
+        for c in range(w):
+            color = cover_arr[r, c]
+            block_color = np.stack([color, white])
+            block_white = np.stack([white, color])
+            flip = rng.random() > 0.5
+            base = block_color if flip else block_white
+
+            if secret_mask[r, c]:
+                for s in shares:
+                    s[r, c * 2 : c * 2 + 2] = base
+            else:
+                for idx, s in enumerate(shares):
+                    alt = block_white if (flip ^ (idx % 2 == 0)) else block_color
+                    s[r, c * 2 : c * 2 + 2] = alt
+
+    return [Image.fromarray(s) for s in shares]
