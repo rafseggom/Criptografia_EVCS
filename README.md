@@ -42,5 +42,47 @@ Referencia principal: C.-N. Yang et al., “Extended color visual cryptography f
 ## 5. Instalación y ejecución local
 1) Crea y activa un entorno (opcional, recomendado).
 2) Instala dependencias:
-````bash
+```bash
 pip install streamlit pillow numpy
+```
+3) Ejecuta la app:
+```bash
+streamlit run app.py
+```
+4) Abre el enlace local que muestra Streamlit (por defecto http://localhost:8501).
+
+---
+
+## 6. Uso rápido
+1) Sube la imagen **Secreto B/N** y la **Cobertura** (color).
+2) Elige la **Construcción** y el **Tamaño base**.
+3) En la pestaña **2 participantes**, pulsa **Generar sombras (2)** y usa la demostración.
+4) En **+2 participantes**, selecciona n (3–5) y pulsa **Generar sombras (n participantes)**; usa el laboratorio para mover/autoajustar.
+
+---
+
+## 7. Estructura del repo (principal)
+- `app.py` — UI Streamlit, pestañas de 2 y n participantes, autoajuste.
+- `logic.py` — Preparación de imágenes, generadores de sombras para 2 y multi.
+- `components.py` — Visores HTML (drag/drop, autoajuste).
+- `resumen.md` — Resumen técnico del paper.
+- `README.md` — Este documento.
+
+---
+
+## 8. Limitaciones actuales
+- Perfect Black solo en modo 2 participantes.
+- La demo multiusa un esquema básico extendido (k=n). El contraste puede variar según n y covers.
+- No se incluyen matrices optimizadas para todos los (k, n); foco pedagógico.
+
+---
+
+## 9. Despliegue
+- Local: `streamlit run app.py`.
+- Streamlit Community Cloud: sube a GitHub y crea la app en https://share.streamlit.io.
+- Otros PaaS: configura el entrypoint apuntando a `streamlit run app.py`.
+
+---
+
+## 10. Créditos
+Implementación basada en la idea de **Extended Color Visual Cryptography** (Yang et al., 2015) adaptada a una demo educativa con Streamlit.
