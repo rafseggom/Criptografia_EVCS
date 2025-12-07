@@ -10,10 +10,11 @@ def image_to_base64(img):
     return base64.b64encode(buffered.getvalue()).decode()
 
 
-def render_drag_drop_demo(b64_img1, b64_img2, *, width=None, height=None, snap=18):
+def render_drag_drop_demo(b64_img1, b64_img2, *, width=None, height=None):
     cw = int(width or 900)
     ch = int(height or 600)
-    aspect = f"{cw}/{ch}"
+    cw_view = int(cw * 1.35)
+    ch_view = int(ch * 1.35)
     template = Template(
         """
     <!DOCTYPE html>
@@ -21,13 +22,13 @@ def render_drag_drop_demo(b64_img1, b64_img2, *, width=None, height=None, snap=1
     <head>
       <style>
         body { margin: 0; padding: 0; background: #f8fafc; font-family: 'Segoe UI', sans-serif; }
-        .wrap { display: flex; flex-direction: column; gap: 10px; }
+        .wrap { display: flex; flex-direction: column; gap: 10px; width: min(95vw, 1600px); margin: 0 auto; }
         .controls { display: flex; gap: 12px; align-items: center; justify-content: flex-end; padding: 6px 8px; }
         .btn { background: #0f172a; color: white; border: none; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         .btn:active { transform: translateY(1px); }
         .hint { color: #475569; font-size: 13px; margin-left: auto; }
-        .canvas { position: relative; width: 100%; max-width: 1100px; aspect-ratio: ${aspect}; max-height: 78vh; border: 1px solid #d9e2ec; border-radius: 12px; overflow: hidden; background: #ffffff; margin: 0 auto; }
-        .draggable { position: absolute; inset: 0; cursor: grab; width: 100%; height: 100%; mix-blend-mode: multiply; transition: box-shadow 0.15s ease; image-rendering: pixelated; image-rendering: crisp-edges; }
+        .canvas { position: relative; width: 100%; height: clamp(60vh, ${ch_view}px, 90vh); border: 1px solid #d9e2ec; border-radius: 12px; overflow: hidden; background: #ffffff; }
+        .draggable { position: absolute; left: 6%; top: 6%; width: 88%; height: 88%; cursor: grab; mix-blend-mode: multiply; transition: box-shadow 0.15s ease; image-rendering: pixelated; image-rendering: crisp-edges; }
         .draggable:active { cursor: grabbing; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18); }
         #img1 { border: 2px solid #2563eb; border-radius: 6px; z-index: 1; }
         #img2 { border: 2px solid #ef4444; border-radius: 6px; z-index: 2; }
@@ -39,7 +40,7 @@ def render_drag_drop_demo(b64_img1, b64_img2, *, width=None, height=None, snap=1
     <body>
       <div class="wrap">
         <div class="controls">
-          <div class="hint">Arrastra y suelta. Si se alinean a menos de ${snap}px se acoplan.</div>
+          <div class="hint">Arrastra y suelta. Usa el botón para alinear perfecto.</div>
           <button class="btn" id="auto">Ajustar automáticamente</button>
         </div>
         <div class="canvas" id="canvas">
@@ -53,7 +54,6 @@ def render_drag_drop_demo(b64_img1, b64_img2, *, width=None, height=None, snap=1
       <script>
         const canvas = document.getElementById('canvas');
         const imgs = Array.from(document.querySelectorAll('.draggable'));
-        const snapRange = ${snap};
         let active = null;
         let startX = 0, startY = 0, baseX = 0, baseY = 0;
 
@@ -72,18 +72,6 @@ def render_drag_drop_demo(b64_img1, b64_img2, *, width=None, height=None, snap=1
 
         const snapTogether = () => {
           imgs.forEach(img => applyTranslate(img, 0, 0));
-        };
-
-        const maybeSnap = (el) => {
-          const other = imgs.find(i => i !== el);
-          const pos = getTranslate(el);
-          const posOther = getTranslate(other);
-          const dx = pos.x - posOther.x;
-          const dy = pos.y - posOther.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist <= snapRange) {
-            snapTogether();
-          }
         };
 
         const start = (e) => {
@@ -106,10 +94,7 @@ def render_drag_drop_demo(b64_img1, b64_img2, *, width=None, height=None, snap=1
           applyTranslate(active, baseX + dx, baseY + dy);
         };
 
-        const end = () => {
-          if (active) maybeSnap(active);
-          active = null;
-        };
+        const end = () => { active = null; };
 
         const centerOffset = 30;
         window.addEventListener('load', () => {
@@ -129,5 +114,5 @@ def render_drag_drop_demo(b64_img1, b64_img2, *, width=None, height=None, snap=1
     </html>
     """
     )
-    html_code = template.substitute(aspect=aspect, img1=b64_img1, img2=b64_img2, snap=snap)
+    html_code = template.substitute(img1=b64_img1, img2=b64_img2, cw=cw, ch=ch, cw_view=cw_view, ch_view=ch_view)
     components.html(html_code, height=720)

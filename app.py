@@ -97,6 +97,14 @@ if run:
     _generate()
 
 if st.session_state.get("generated"):
+    st.subheader("Cómo funciona el esquema elegido")
+    if "Básico" in algo:
+        st.markdown("- Construcción 1 (RGB, m=2): cada píxel se expande a dos subpíxeles horizontales. Si el secreto es blanco, ambos participantes reciben el mismo patrón; si es negro, reciben patrones complementarios que bloquean la luz al superponerse.")
+    elif "Complementarios" in algo:
+        st.markdown("- Construcción 2 (RGB+CMY, m=2): usa el color y su complementario en cada par de subpíxeles para aumentar contraste. Blanco: patrones iguales; negro: patrones invertidos, logrando opacidad.")
+    else:
+        st.markdown("- Construcción 3 (Perfect Black, m=4): cada píxel se convierte en un bloque 2x2. Blanco: ambos comparten el mismo patrón diagonal; negro: se intercambian las diagonales, produciendo negro sólido al superponer.")
+
     prev_col1, prev_col2, prev_col3 = st.columns([1, 1, 1])
     with prev_col1:
         st.image(st.session_state["secret_prev"], caption="Secreto binarizado", use_container_width=True)
@@ -115,17 +123,13 @@ if st.session_state.get("generated"):
 
     st.markdown("---")
     st.subheader("Recuperación del secreto")
-    tab_manual, tab_auto = st.tabs(["👆 Manual con snapping", "✨ Auto-merge"])
+    tab_manual, = st.tabs(["👆 Demostración"])
 
     with tab_manual:
         st.caption("Arrastra y alinea; con 'Ajustar automáticamente' se superponen al centro sin desplazamiento.")
         b1 = components.image_to_base64(st.session_state["s1"])
         b2 = components.image_to_base64(st.session_state["s2"])
         w, h = st.session_state["s1"].size
-        components.render_drag_drop_demo(b1, b2, width=w, height=h, snap=16)
-
-    with tab_auto:
-        st.caption("Superposición matemática perfecta (Multiply).")
-        st.image(st.session_state["merged"], caption="Secreto revelado", use_container_width=True)
+        components.render_drag_drop_demo(b1, b2, width=w, height=h)
 else:
     st.info("Sube las imágenes, elige construcción y pulsa Generar sombras.")
