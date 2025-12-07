@@ -13,49 +13,56 @@ def render_drag_drop_demo(b64_img1, b64_img2):
     <html>
     <head>
     <style>
-      body {{ margin: 0; padding: 0; background-color: #f0f2f6; }}
+      /* FONDO BLANCO PARA SIMULAR MESA DE LUZ / PAPEL */
+      body {{ margin: 0; padding: 0; background-color: #ffffff; }}
+      
       .container {{
         position: relative;
         width: 100%;
-        height: 550px;
-        border: 2px dashed #bbb;
+        height: 600px;
+        border: 2px solid #ccc;
         border-radius: 8px;
         display: flex;
         justify_content: center;
         align-items: center;
         overflow: hidden;
+        background-color: white;
       }}
+      
       .draggable {{
         position: absolute;
         cursor: grab;
         max-width: 90%;
         max-height: 90%;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        /* MULTIPLY: Simula tintas sumándose sobre papel blanco */
         mix-blend-mode: multiply; 
       }}
-      .draggable:active {{ cursor: grabbing; }}
-      #img1 {{ left: 5%; top: 5%; border: 4px solid #3b82f6; }} /* Azul - Participante 1 */
-      #img2 {{ right: 5%; bottom: 5%; border: 4px solid #ef4444; }} /* Rojo - Participante 2 */
       
-      .label {{
+      .draggable:active {{ cursor: grabbing; }}
+      
+      /* Borde rojo y azul para diferenciar */
+      #img1 {{ left: 5%; top: 5%; border: 2px solid #3b82f6; z-index: 1; }}
+      #img2 {{ right: 5%; bottom: 5%; border: 2px solid #ef4444; z-index: 2; }}
+      
+      .badge {{
         position: absolute;
-        background: white;
-        padding: 2px 5px;
-        font-family: monospace;
+        padding: 5px 10px;
+        color: white;
+        font-family: sans-serif;
+        font-size: 14px;
         font-weight: bold;
-        border-radius: 3px;
-        z-index: 10;
+        border-radius: 4px;
+        z-index: 100;
       }}
     </style>
     </head>
     <body>
     <div class="container">
-      <div style="position:absolute; top:10px; left:10px; color:#555; font-family:sans-serif;">
-        Arrastra una imagen sobre la otra para "sumar" las transparencias.
-      </div>
-      
-      <img id="img1" src="data:image/png;base64,{b64_img1}" class="draggable" style="z-index: 1;">
-      <img id="img2" src="data:image/png;base64,{b64_img2}" class="draggable" style="z-index: 2;">
+      <div class="badge" style="background:#3b82f6; left:5%; top:1%;">Participante 1</div>
+      <div class="badge" style="background:#ef4444; right:5%; bottom:1%;">Participante 2 (Arrástrame)</div>
+
+      <img id="img1" src="data:image/png;base64,{b64_img1}" class="draggable">
+      <img id="img2" src="data:image/png;base64,{b64_img2}" class="draggable">
     </div>
 
     <script>
@@ -81,7 +88,6 @@ def render_drag_drop_demo(b64_img1, b64_img2):
         if (e.target.classList.contains('draggable')) {{
           activeItem = e.target;
           active = true;
-          
           var style = window.getComputedStyle(activeItem);
           var matrix = new WebKitCSSMatrix(style.transform);
           xOffset = matrix.m41;
@@ -125,4 +131,4 @@ def render_drag_drop_demo(b64_img1, b64_img2):
     </body>
     </html>
     """
-    components.html(html_code, height=560)
+    components.html(html_code, height=620)
