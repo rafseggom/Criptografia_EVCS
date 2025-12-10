@@ -65,7 +65,7 @@ st.subheader("📸 Imágenes de cobertura (una por participante)")
 st.caption("Sube una imagen de cobertura para cada participante. El número de imágenes determina el número de participantes.")
 
 # Usar columnas para mostrar los uploader de forma horizontal
-cover_files = [None] * 5  # Inicializar con None
+cover_files = [None] * 5 
 max_participants = 5
 cols = st.columns(max_participants)
 
@@ -168,41 +168,72 @@ def _generate_multi():
 if n_participants == 2:
     run2 = st.button("🚀 Generar sombras (2 participantes)", use_container_width=True, type="primary")
     if run2:
-        _generate_2()
+        _generate_multi()
 
-    if st.session_state.get("generated"):
+    if st.session_state.get("generated_multi"):
         with st.expander("ℹ️ Cómo funciona el esquema elegido", expanded=False):
-            col_exp_left, col_exp_mid, col_exp_right = st.columns([2, 2, 2])
-            
-            with col_exp_left:
-                if "Básico" in algo:
-                    st.markdown("**Construcción 1 (RGB, m=2)**\n\n- **Blanco**: Mismo patrón\n- **Negro**: Patrones complementarios")
-                elif "Complementarios" in algo:
-                    st.markdown("**Construcción 2 (RGB+CMY, m=2)**\n\n- **Blanco**: Patrones iguales\n- **Negro**: Patrones invertidos")
-                else:
-                    st.markdown("**Construcción 3 (Perfect Black, m=4)**\n\n- **Blanco**: Diagonal compartida\n- **Negro**: Diagonales intercambiadas")
-            
-            with col_exp_mid:
-                st.image(st.session_state["secret_prev"], caption="Secreto", use_container_width=True)
-            
-            with col_exp_right:
-                dims = st.session_state["s1"].size
-                st.metric("Resolución", f"{dims[0]}×{dims[1]}")
+            if "Básico" in algo:
+                st.markdown("""
+                **Construcción 1: Básico RGB (m=2)**
+                
+                Para cada píxel del secreto:
+                - **Píxel NEGRO**: Ambas sombras generan el mismo patrón [Color | Blanco]
+                  - Al superponer: Color × Blanco = **Negro** ✓
+                - **Píxel BLANCO**: Las sombras generan patrones complementarios
+                  - Sombra 1: [Color | Blanco] | Sombra 2: [Blanco | Color]
+                  - Al superponer: Todos los píxeles se cancelan = **Blanco** ✓
+                
+                Cada participante usa su propia imagen de cobertura, garantizando privacidad.
+                """)
+            elif "Complementarios" in algo:
+                st.markdown("""
+                **Construcción 2: Complementarios RGB+CMY (m=2)**
+                
+                Utiliza colores complementarios para mayor contraste:
+                - **Píxel NEGRO**: Ambas sombras: [Color | Color_Inverso]
+                  - Al superponer: Color × Inverso = **Negro** ✓
+                - **Píxel BLANCO**: Patrones cruzados que se anulan
+                  - Sombra 1: [Color | Inverso] | Sombra 2: [Inverso | Color]
+                  - Resultado final: **Blanco** ✓
+                
+                Mayor separación de valores garantiza mejor visibilidad del secreto.
+                """)
+            else:
+                st.markdown("""
+                **Construcción 3: Perfect Black (m=4)**
+                
+                Expansión 2×2 con máximo contraste:
+                - **Píxel NEGRO**: Ambas sombras comparten diagonal = **Negro puro**
+                - **Píxel BLANCO**: Diagonales intercambiadas = **Blanco puro**
+                
+                Resultado: Revelado nítido sin grises intermedios.
+                """)
 
-        st.subheader("Sombras generadas")
-        share_a, share_b = st.columns(2)
-        with share_a:
-            st.image(st.session_state["s1"], caption="Participante 1", use_container_width=True)
-        with share_b:
-            st.image(st.session_state["s2"], caption="Participante 2", use_container_width=True)
+        st.subheader("Resultado")
+        col_secret, col_shares = st.columns([1, 3])
+        
+        with col_secret:
+            st.markdown("**Secreto:**")
+            st.image(st.session_state["secret_prev_multi"], use_container_width=True)
+        
+        with col_shares:
+            st.markdown("**Sombras:**")
+            shares = st.session_state["shares_multi"]
+            n_cols = min(4, len(shares))
+            
+            for row_start in range(0, len(shares), n_cols):
+                row_end = min(row_start + n_cols, len(shares))
+                cols = st.columns(row_end - row_start)
+                for idx, col in enumerate(cols):
+                    share_idx = row_start + idx
+                    with col:
+                        st.image(shares[share_idx], caption=f"P{share_idx+1}", use_container_width=True)
 
         st.markdown("---")
         st.subheader("Recuperación del secreto")
         st.caption("Arrastra y alinea las sombras para revelar el secreto.")
-        b1 = components.image_to_base64(st.session_state["s1"])
-        b2 = components.image_to_base64(st.session_state["s2"])
-        w, h = st.session_state["s1"].size
-        components.render_drag_drop_demo(b1, b2, width=w, height=h)
+        b_list = [components.image_to_base64(img) for img in st.session_state["shares_multi"]]
+        components.render_multi_drag_demo(b_list, height=820)
 
 elif n_participants > 2:
     run_multi = st.button("🚀 Generar sombras (n participantes)", use_container_width=True, type="secondary")
@@ -211,35 +242,51 @@ elif n_participants > 2:
 
     if st.session_state.get("generated_multi"):
         with st.expander("ℹ️ Cómo funciona el esquema elegido", expanded=False):
-            col_exp_left, col_exp_mid, col_exp_right = st.columns([2, 2, 2])
-            
-            with col_exp_left:
-                if "Básico" in algo:
-                    st.markdown("**Construcción 1 (RGB, m=2)**\n\n- **Blanco**: Mismo patrón\n- **Negro**: Patrones complementarios")
-                elif "Complementarios" in algo:
-                    st.markdown("**Construcción 2 (RGB+CMY, m=2)**\n\n- **Blanco**: Patrones iguales\n- **Negro**: Patrones invertidos")
-            
-            with col_exp_mid:
-                st.image(st.session_state["secret_prev_multi"], caption="Secreto", use_container_width=True)
-            
-            with col_exp_right:
-                dims = st.session_state["shares_multi"][0].size
-                st.metric("Resolución", f"{dims[0]}×{dims[1]}")
+            if "Básico" in algo:
+                st.markdown("""
+                **Construcción 1: Básico RGB (m=2, n participantes)**
+                
+                Extensión de Yang et al. (2015) para n participantes:
+                - **Píxel NEGRO**: TODAS las sombras generan el mismo patrón
+                  - Al multiplicar n sombras: Color^n = **Negro** ✓
+                - **Píxel BLANCO**: Cada sombra genera un patrón diferente (índice par/impar)
+                  - Patrones complementarios se cancelan al multiplicar todas = **Blanco** ✓
+                
+                Cada participante i recibe una sombra única generada con su imagen de cobertura.
+                Solo al superponer TODAS se recupera el secreto.
+                """)
+            elif "Complementarios" in algo:
+                st.markdown("""
+                **Construcción 2: Complementarios (m=2, n participantes)**
+                
+                Adaptación a múltiples participantes:
+                - **Píxel NEGRO**: Todas: [Color | Inverso]
+                  - Multiplicación de n sombras = **Negro sólido** ✓
+                - **Píxel BLANCO**: Patrones alterados por índice
+                  - La distribución par/impar garantiza cancelación = **Blanco** ✓
+                
+                Mejor contraste que Básico para revelado visual claro.
+                """)
 
-        st.subheader("Sombras generadas (n participantes)")
-        st.caption("✓ Cada participante tiene su sombra personalizada. Todas son necesarias para revelar el secreto.")
+        st.subheader("Resultado")
+        col_secret, col_shares = st.columns([1, 3])
         
-        # Mostrar sombras en filas si hay más de 4
-        shares = st.session_state["shares_multi"]
-        n_cols = min(4, len(shares))
+        with col_secret:
+            st.markdown("**Secreto:**")
+            st.image(st.session_state["secret_prev_multi"], use_container_width=True)
         
-        for row_start in range(0, len(shares), n_cols):
-            row_end = min(row_start + n_cols, len(shares))
-            cols = st.columns(row_end - row_start)
-            for idx, col in enumerate(cols):
-                share_idx = row_start + idx
-                with col:
-                    st.image(shares[share_idx], caption=f"Participante {share_idx+1}", use_container_width=True)
+        with col_shares:
+            st.markdown("**Sombras:**")
+            shares = st.session_state["shares_multi"]
+            n_cols = min(4, len(shares))
+            
+            for row_start in range(0, len(shares), n_cols):
+                row_end = min(row_start + n_cols, len(shares))
+                cols = st.columns(row_end - row_start)
+                for idx, col in enumerate(cols):
+                    share_idx = row_start + idx
+                    with col:
+                        st.image(shares[share_idx], caption=f"P{share_idx+1}", use_container_width=True)
 
         st.markdown("---")
         st.subheader("Laboratorio n participantes")
