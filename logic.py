@@ -183,13 +183,8 @@ def generate_basic_multi(secret_mask, cover_arrs, *, seed=None):
     Yang et al. (2015): Construcción VCS extendida para n participantes.
     
     Principio matemático:
-    - Píxel NEGRO (secreto): TODAS las sombras generan [Color_i, Blanco]
-      → Al multiplicar: Color_1 × Color_2 × ... × Color_n × Blanco = NEGRO ✓
-    
-    - Píxel BLANCO (fondo): Las sombras generan patrones ALTERNOS
-      → Índices pares: [Color_i, Blanco]
-      → Índices impares: [Blanco, Color_i]
-      → Al multiplicar: Se cancelan y producen BLANCO ✓
+    - Píxel BLANCO (fondo/máscara=True): Patrones ALTERNOS que se cancelan
+    - Píxel NEGRO (secreto/máscara=False): TODAS las sombras generan el MISMO patrón
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
@@ -201,14 +196,13 @@ def generate_basic_multi(secret_mask, cover_arrs, *, seed=None):
         for c in range(w):
             flip = rng.random() > 0.5
             
-            if secret_mask[r, c]:  # PIXEL BLANCO (Fondo)
+            if secret_mask[r, c]:  # BLANCO (fondo)
                 # Patrones alternos que se cancelan
                 for i in range(n):
                     color = cover_arrs[i][r, c]
                     block_color = np.stack([color, white])
                     block_white = np.stack([white, color])
                     
-                    # Paridad determina patrón
                     if i % 2 == 0:
                         pattern = block_color if flip else block_white
                     else:
@@ -216,7 +210,7 @@ def generate_basic_multi(secret_mask, cover_arrs, *, seed=None):
                     
                     shares[i][r, c*2 : c*2+2] = pattern
             
-            else:  # PIXEL NEGRO (Secreto)
+            else:  # NEGRO (secreto)
                 # TODAS las sombras generan el MISMO patrón
                 for i in range(n):
                     color = cover_arrs[i][r, c]
@@ -233,7 +227,6 @@ def generate_basic_multi(secret_mask, cover_arrs, *, seed=None):
 def generate_complementary_multi(secret_mask, cover_arrs, *, seed=None):
     """
     Yang et al. (2015) con colores complementarios para mayor contraste.
-    Usa inverso cromático en lugar de blanco.
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
@@ -244,7 +237,7 @@ def generate_complementary_multi(secret_mask, cover_arrs, *, seed=None):
         for c in range(w):
             flip = rng.random() > 0.5
             
-            if secret_mask[r, c]:  # PIXEL BLANCO
+            if secret_mask[r, c]:  # BLANCO
                 # Patrones alternos con complementarios
                 for i in range(n):
                     color = cover_arrs[i][r, c]
@@ -259,7 +252,7 @@ def generate_complementary_multi(secret_mask, cover_arrs, *, seed=None):
                     
                     shares[i][r, c*2 : c*2+2] = pattern
             
-            else:  # PIXEL NEGRO
+            else:  # NEGRO
                 # TODAS las sombras: MISMO patrón
                 for i in range(n):
                     color = cover_arrs[i][r, c]
