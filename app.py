@@ -166,7 +166,7 @@ def _generate_multi():
 
 # Mostrar botones según número de participantes
 if n_participants == 2:
-    run2 = st.button("🚀 Generar sombras (2 participantes)", use_container_width=True, type="primary")
+    run2 = st.button("🚀 Generar sombras (2 participantes)", width='stretch', type="primary")
     if run2:
         _generate_multi()
 
@@ -214,7 +214,7 @@ if n_participants == 2:
         
         with col_secret:
             st.markdown("**Secreto:**")
-            st.image(st.session_state["secret_prev_multi"], use_container_width=True)
+            st.image(st.session_state["secret_prev_multi"], width='stretch')
         
         with col_shares:
             st.markdown("**Sombras:**")
@@ -227,7 +227,7 @@ if n_participants == 2:
                 for idx, col in enumerate(cols):
                     share_idx = row_start + idx
                     with col:
-                        st.image(shares[share_idx], caption=f"P{share_idx+1}", use_container_width=True)
+                        st.image(shares[share_idx], caption=f"P{share_idx+1}", width='stretch')
 
         st.markdown("---")
         st.subheader("Recuperación del secreto")
@@ -236,7 +236,7 @@ if n_participants == 2:
         components.render_multi_drag_demo(b_list, height=820)
 
 elif n_participants > 2:
-    run_multi = st.button("🚀 Generar sombras (n participantes)", use_container_width=True, type="secondary")
+    run_multi = st.button("🚀 Generar sombras (n participantes)", width='stretch', type="secondary")
     if run_multi:
         _generate_multi()
 
@@ -273,7 +273,7 @@ elif n_participants > 2:
         
         with col_secret:
             st.markdown("**Secreto:**")
-            st.image(st.session_state["secret_prev_multi"], use_container_width=True)
+            st.image(st.session_state["secret_prev_multi"], width='stretch')
         
         with col_shares:
             st.markdown("**Sombras:**")
@@ -286,7 +286,7 @@ elif n_participants > 2:
                 for idx, col in enumerate(cols):
                     share_idx = row_start + idx
                     with col:
-                        st.image(shares[share_idx], caption=f"P{share_idx+1}", use_container_width=True)
+                        st.image(shares[share_idx], caption=f"P{share_idx+1}", width='stretch')
 
         st.markdown("---")
         st.subheader("Laboratorio n participantes")
