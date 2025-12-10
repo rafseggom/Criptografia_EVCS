@@ -26,7 +26,7 @@ st.markdown(
 )
 
 st.title("🔐 EVCSdemo · Criptografía Visual Extendida")
-st.caption("Demo pedagógica en tema claro: tres construcciones, arrastre con snapping y alineado automático.")
+st.caption("Demo pedagógica para mostrar el funcionamiento de EVCS con diferentes construcciones.")
 
 if "generated" not in st.session_state:
     st.session_state.generated = False
