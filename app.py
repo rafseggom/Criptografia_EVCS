@@ -48,8 +48,9 @@ with col_b:
             "Construcción 2 · (2,2) VCS",
             "Construcción 3 · Perfect Black",
             "Construcción 4 · Simple 6-Color",
+            "Construcción 5 · EVCS", 
         ),
-        index=2,
+        index=1, 
     )
     size = st.slider("Tamaño base (px)", 320, 900, 640, step=40)
     if "Básico" in algo:
@@ -160,6 +161,8 @@ def _generate_multi():
             shares = logic.generate_2_2_vcs_multi(mask, cover_arrs)
         elif "Simple" in algo:
             shares = logic.generate_simple_6color(mask, cover_arrs)
+        elif "EVCS" in algo: 
+            shares = logic.generate_evcs_colored(mask, cover_arrs)
         else:
             # Perfect Black solo para 2 participantes
             s1, s2 = logic.generate_perfect_black(mask, cover_arrs[0])
@@ -222,6 +225,20 @@ if n_participants == 2:
                   - No hay superposición de complementarios → fondo colorido
                 
                 m=2 horizontal, aleatorización total, máximo contraste visual.
+                """)
+            elif "EVCS" in algo: # <--- NUEVO
+                st.markdown("""
+                **Construcción 5: EVCS Coloreado (Propuesta del Grupo)**
+                
+                Mejora sobre el esquema de 6 colores para incluir la propiedad EVCS (Extended Visual Cryptography):
+                
+                - **Objetivo**: Que las sombras no sean ruido aleatorio, sino que muestren las imágenes de los participantes (Cover 1 y Cover 2).
+                - **Técnica**: Sesgo de probabilidad cromática.
+                  - Si el píxel de *Cover* es texto (oscuro), forzamos colores base (R, G, B).
+                  - Si el píxel de *Cover* es fondo (claro), forzamos colores mezcla (C, M, Y).
+                - **Recuperación del Secreto**:
+                  - Se mantiene la regla matemática: Colores complementarios generan negro (secreto), colores no complementarios generan color (fondo).
+                  - El algoritmo busca combinaciones que satisfagan *simultáneamente* la visibilidad del secreto y la apariencia de las sombras.
                 """)
             else:
                 st.markdown("""

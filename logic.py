@@ -401,3 +401,123 @@ def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
                 shares[1][r, c*2+1] = colors[comp1]
 
     return [Image.fromarray(s) for s in shares]
+
+def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
+    """
+    Construcción 5: EVCS Coloreado Heurístico.
+    
+    Inputs:
+        secret_mask: Matriz booleana del secreto (False=Negro, True=Blanco).
+        cover_arrs: Lista de 2 arrays con las imágenes de cobertura (Cover1, Cover2).
+    
+    Output:
+        Dos imágenes (Sombra 1 y Sombra 2) que:
+        1. Revelan el secreto perfectamente al superponerse.
+        2. Muestran (con ruido de color) las imágenes de cobertura individualmente.
+    """
+    rng = np.random.default_rng(seed)
+    h, w = secret_mask.shape
+    n = len(cover_arrs)
+    
+    if n != 2:
+        # Por seguridad, si no hay 2 covers exactos, usamos ruido para el segundo
+        # o lanzamos error. Asumiremos 2 para esta construcción.
+        pass 
+    
+    shares = [np.zeros((h, w * 2, 3), dtype=np.uint8) for _ in range(2)]
+    
+    # 1. Definición de Paleta de Colores
+    # Grupo A (Oscuros/Base): R, G, B
+    # Grupo B (Claros/Mezcla): C, M, Y
+    # Índices: 0:R, 1:G, 2:B, 3:C, 4:M, 5:Y
+    colors = {
+        0: np.array([255, 0, 0], dtype=np.uint8),   # R
+        1: np.array([0, 255, 0], dtype=np.uint8),   # G
+        2: np.array([0, 0, 255], dtype=np.uint8),   # B
+        3: np.array([0, 255, 255], dtype=np.uint8), # C
+        4: np.array([255, 0, 255], dtype=np.uint8), # M
+        5: np.array([255, 255, 0], dtype=np.uint8), # Y
+    }
+    
+    # Mapa de complementarios: R<->C, G<->M, B<->Y
+    comp_map = {0: 3, 1: 4, 2: 5, 3: 0, 4: 1, 5: 2}
+    
+    # Convertimos los covers a máscaras booleanas para saber si es texto (negro) o fondo
+    # Usamos un umbral simple de luminosidad. 
+    # True = Fondo (Blanco), False = Texto (Negro)
+    covers_bin = []
+    for carr in cover_arrs:
+        # Convertir a escala de grises promedio para determinar oscuridad
+        gray = np.mean(carr, axis=2)
+        covers_bin.append(gray > 127) 
+
+    for r in range(h):
+        for c in range(w):
+            # Analizamos qué piden los Covers en este píxel
+            # Si cover es False (Texto/Negro) -> Preferimos colores Oscuros (0,1,2)
+            # Si cover es True (Fondo/Blanco) -> Preferimos colores Claros (3,4,5)
+            
+            pref_c1 = [0, 1, 2] if not covers_bin[0][r, c] else [3, 4, 5]
+            pref_c2 = [0, 1, 2] if not covers_bin[1][r, c] else [3, 4, 5]
+            
+            # Analizamos el Secreto
+            is_secret_white = secret_mask[r, c]
+            
+            # Vamos a generar 2 sub-píxeles por cada píxel original (m=2)
+            for sub_idx in range(2):
+                
+                # Intentamos satisfacer las preferencias
+                # Buscamos un par (color1, color2) que cumpla la regla del secreto
+                # y maximice la coincidencia con las preferencias de los covers.
+                
+                found = False
+                candidates = []
+                
+                # Probamos combinaciones aleatorias para no generar patrones repetitivos
+                # Barajamos las preferencias para dar variedad
+                p1_shuffled = rng.permutation(pref_c1)
+                
+                for c1 in p1_shuffled:
+                    if found: break
+                    
+                    if is_secret_white:
+                        # CASO SECRETO BLANCO: c1 y c2 NO deben ser complementarios
+                        # Intentamos buscar un c2 que esté en las preferencias de Cover 2
+                        possible_c2 = [x for x in pref_c2 if x != comp_map[c1]]
+                        
+                        if not possible_c2:
+                            # Si no podemos satisfacer a Cover 2, elegimos cualquiera válido
+                            # (priorizamos Cover 1 y el Secreto)
+                            all_colors = [0, 1, 2, 3, 4, 5]
+                            possible_c2 = [x for x in all_colors if x != comp_map[c1]]
+                        
+                        # Elegimos uno
+                        c2 = rng.choice(possible_c2)
+                        candidates = (c1, c2)
+                        found = True
+                        
+                    else: 
+                        # CASO SECRETO NEGRO: c1 y c2 DEBEN ser complementarios
+                        target_c2 = comp_map[c1]
+                        
+                        # Verificamos si este c2 "forzado" encaja con lo que quiere Cover 2
+                        # Si encaja, genial. Si no, lo usamos igual porque el SECRETO manda.
+                        # Pero intentamos iterar sobre p1 para ver si alguno tiene un complementario
+                        # que le guste a Cover 2.
+                        
+                        if target_c2 in pref_c2:
+                            # ¡Match perfecto! Todos contentos
+                            candidates = (c1, target_c2)
+                            found = True
+                        else:
+                            # Guardamos este candidato como "reserva" por si no encontramos el perfecto
+                            if not candidates:
+                                candidates = (c1, target_c2)
+                
+                # Asignamos los colores elegidos
+                color1, color2 = candidates
+                
+                shares[0][r, c*2 + sub_idx] = colors[color1]
+                shares[1][r, c*2 + sub_idx] = colors[color2]
+
+    return [Image.fromarray(s) for s in shares]
