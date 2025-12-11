@@ -45,7 +45,7 @@ with col_b:
         "Elige esquema",
         (
             "Construcción 1 · Básico RGB",
-            "Construcción 2 · Complementarios",
+            "Construcción 2 · (2,2) VCS",
             "Construcción 3 · Perfect Black",
         ),
         index=2,
@@ -53,10 +53,10 @@ with col_b:
     size = st.slider("Tamaño base (px)", 320, 900, 640, step=40)
     if "Básico" in algo:
         st.caption("m=2 horizontal, contraste estándar y colores originales.")
-    elif "Complementarios" in algo:
-        st.caption("m=2 horizontal, usa color y complementarios para mayor contraste.")
+    elif "(2,2)" in algo:
+        st.caption("m=2 horizontal, n=2 participantes, k=2 umbral (todos necesarios).")
     else:
-        st.caption("m=4 (2x2), negro sólido y revelado nítido.")
+        st.caption("m=4 (2x2), negro sólido perfecto y revelado nítido.")
 
 st.markdown("---")
 
@@ -129,7 +129,7 @@ def _generate_multi():
         return
     
     if "Perfect Black" in algo and n_participants != 2:
-        st.warning("Perfect Black está disponible solo para 2 participantes en esta demo. Usa Básico o Complementarios.")
+        st.warning("Perfect Black está disponible solo para 2 participantes en esta demo. Usa Básico o (2,2) VCS.")
         return
     
     with st.spinner("Aplicando EVCS con sombras personalizadas..."):
@@ -149,8 +149,8 @@ def _generate_multi():
         
         if "Básico" in algo:
             shares = logic.generate_basic_multi(mask, cover_arrs)
-        elif "Complementarios" in algo:
-            shares = logic.generate_complementary_multi(mask, cover_arrs)
+        elif "(2,2)" in algo:
+            shares = logic.generate_2_2_vcs_multi(mask, cover_arrs)
         else:
             # Perfect Black solo para 2 participantes
             shares = logic.generate_basic_multi(mask, cover_arrs)
@@ -166,7 +166,7 @@ def _generate_multi():
 
 # Mostrar botones según número de participantes
 if n_participants == 2:
-    run2 = st.button("🚀 Generar sombras (2 participantes)", use_container_width=True, type="primary")
+    run2 = st.button("🚀 Generar sombras (2 participantes)", width='stretch', type="primary")
     if run2:
         _generate_multi()
 
@@ -185,28 +185,31 @@ if n_participants == 2:
                 
                 Cada participante usa su propia imagen de cobertura, garantizando privacidad.
                 """)
-            elif "Complementarios" in algo:
+            elif "(2,2)" in algo:
                 st.markdown("""
-                **Construcción 2: Complementarios RGB+CMY (m=2)**
+                **Construcción 2: (2,2) VCS de Yang et al. (2015)**
                 
-                Utiliza colores complementarios para mayor contraste:
-                - **Píxel NEGRO**: Ambas sombras: [Color | Color_Inverso]
-                  - Al superponer: Color × Inverso = **Negro** ✓
-                - **Píxel BLANCO**: Patrones cruzados que se anulan
-                  - Sombra 1: [Color | Inverso] | Sombra 2: [Inverso | Color]
-                  - Resultado final: **Blanco** ✓
+                Esquema umbral donde n=2 participantes y k=2 (ambos necesarios):
+                - **Píxel NEGRO**: Ambas sombras comparten el MISMO patrón
+                  - [Color | Blanco] en ambas sombras
+                  - Superposición: **Negro visible** ✓
+                - **Píxel BLANCO**: Patrones COMPLEMENTARIOS que se anulan
+                  - Sombra 1: [Color | Blanco] | Sombra 2: [Blanco | Color]
+                  - Superposición: **Blanco** ✓
                 
-                Mayor separación de valores garantiza mejor visibilidad del secreto.
+                Expansión de píxel m=2 horizontal. Sin una sombra no se revela nada.
                 """)
             else:
                 st.markdown("""
                 **Construcción 3: Perfect Black (m=4)**
                 
-                Expansión 2×2 con máximo contraste:
-                - **Píxel NEGRO**: Ambas sombras comparten diagonal = **Negro puro**
-                - **Píxel BLANCO**: Diagonales intercambiadas = **Blanco puro**
+                Expansión 2×2 con negro absoluto:
+                - **Píxel NEGRO**: Colores complementarios en posiciones coincidentes
+                  - Color × (255-Color) = **Negro puro 100%** ✓
+                - **Píxel BLANCO**: Patrones diagonales que se cancelan
+                  - Resultado: **Blanco puro** ✓
                 
-                Resultado: Revelado nítido sin grises intermedios.
+                Contraste máximo: negro sólido sin rayas, revelado perfecto.
                 """)
 
         st.subheader("Resultado")
@@ -214,7 +217,7 @@ if n_participants == 2:
         
         with col_secret:
             st.markdown("**Secreto:**")
-            st.image(st.session_state["secret_prev_multi"], use_container_width=True)
+            st.image(st.session_state["secret_prev_multi"], width=300)
         
         with col_shares:
             st.markdown("**Sombras:**")
@@ -227,7 +230,7 @@ if n_participants == 2:
                 for idx, col in enumerate(cols):
                     share_idx = row_start + idx
                     with col:
-                        st.image(shares[share_idx], caption=f"P{share_idx+1}", use_container_width=True)
+                        st.image(shares[share_idx], caption=f"P{share_idx+1}")
 
         st.markdown("---")
         st.subheader("Recuperación del secreto")
@@ -236,7 +239,7 @@ if n_participants == 2:
         components.render_multi_drag_demo(b_list, height=820)
 
 elif n_participants > 2:
-    run_multi = st.button("🚀 Generar sombras (n participantes)", use_container_width=True, type="secondary")
+    run_multi = st.button("🚀 Generar sombras (n participantes)", width='stretch', type="secondary")
     if run_multi:
         _generate_multi()
 
@@ -255,17 +258,17 @@ elif n_participants > 2:
                 Cada participante i recibe una sombra única generada con su imagen de cobertura.
                 Solo al superponer TODAS se recupera el secreto.
                 """)
-            elif "Complementarios" in algo:
+            elif "(2,2)" in algo:
                 st.markdown("""
-                **Construcción 2: Complementarios (m=2, n participantes)**
+                **Construcción 2: (2,2) VCS Multi-participante**
                 
-                Adaptación a múltiples participantes:
-                - **Píxel NEGRO**: Todas: [Color | Inverso]
-                  - Multiplicación de n sombras = **Negro sólido** ✓
-                - **Píxel BLANCO**: Patrones alterados por índice
-                  - La distribución par/impar garantiza cancelación = **Blanco** ✓
+                Extensión para n>2 participantes con umbral k=2:
+                - **Píxel NEGRO**: Todas comparten el mismo patrón base
+                  - Multiplicación conjunta = **Negro visible** ✓
+                - **Píxel BLANCO**: Patrones alternados por índice
+                  - Par/impar se cancelan mutuamente = **Blanco** ✓
                 
-                Mejor contraste que Básico para revelado visual claro.
+                Principio: sin al menos k sombras, el secreto permanece oculto.
                 """)
 
         st.subheader("Resultado")
@@ -273,7 +276,7 @@ elif n_participants > 2:
         
         with col_secret:
             st.markdown("**Secreto:**")
-            st.image(st.session_state["secret_prev_multi"], use_container_width=True)
+            st.image(st.session_state["secret_prev_multi"], width=300)
         
         with col_shares:
             st.markdown("**Sombras:**")
@@ -286,11 +289,11 @@ elif n_participants > 2:
                 for idx, col in enumerate(cols):
                     share_idx = row_start + idx
                     with col:
-                        st.image(shares[share_idx], caption=f"P{share_idx+1}", use_container_width=True)
+                        st.image(shares[share_idx], caption=f"P{share_idx+1}")
 
         st.markdown("---")
-        st.subheader("Laboratorio n participantes")
-        st.caption("Arrastra múltiples sombras. Usa los botones para alinear todo (n) o todas menos una (n-1).")
+        st.subheader("Recuperación del secreto")
+        st.caption("Arrastra y alinea las sombras para revelar el secreto.")
         b_list = [components.image_to_base64(img) for img in st.session_state["shares_multi"]]
         components.render_multi_drag_demo(b_list, height=820)
 

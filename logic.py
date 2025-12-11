@@ -105,14 +105,52 @@ def generate_complementary(secret_mask, cover_arr, *, seed=None):
     return Image.fromarray(s1), Image.fromarray(s2)
 
 
+def generate_2_2_vcs_multi(secret_mask, cover_arrs, *, seed=None):
+    """
+    (2,2) VCS según Yang et al. (2015): n=2 participantes, k=2 umbral, m=2 expansión.
+    
+    Matriz base para (2,2) VCS:
+    - Píxel BLANCO: C0 = [[C,W], [W,C]] → patrones complementarios
+    - Píxel NEGRO: C1 = [[C,W], [C,W]] → mismo patrón
+    """
+    rng = np.random.default_rng(seed)
+    h, w = secret_mask.shape
+    n = len(cover_arrs)
+    shares = [np.zeros((h, w * 2, 3), dtype=np.uint8) for _ in range(n)]
+    white = np.array([255, 255, 255], dtype=np.uint8)
+
+    for r in range(h):
+        for c in range(w):
+            flip = rng.random() > 0.5
+            
+            if secret_mask[r, c]:  # BLANCO (fondo)
+                # Patrones complementarios: cada participante recibe patrón opuesto
+                for i in range(n):
+                    color = cover_arrs[i][r, c]
+                    
+                    if i % 2 == 0:
+                        pattern = np.stack([color, white]) if flip else np.stack([white, color])
+                    else:
+                        pattern = np.stack([white, color]) if flip else np.stack([color, white])
+                    
+                    shares[i][r, c*2 : c*2+2] = pattern
+            
+            else:  # NEGRO (secreto)
+                # Mismo patrón para todos (cohesión)
+                for i in range(n):
+                    color = cover_arrs[i][r, c]
+                    pattern = np.stack([color, white]) if flip else np.stack([white, color])
+                    shares[i][r, c*2 : c*2+2] = pattern
+
+    return [Image.fromarray(s) for s in shares]
+
+
 def generate_perfect_black(secret_mask, cover_arr, *, seed=None):
     """
-    Perfect Black estricto:
-    - Para PIXEL BLANCO (fondo): ambas sombras llevan el mismo patrón (diagonal o antidiagonal)
-      usando [C, W] / [W, C] (como en tu versión).
-    - Para PIXEL NEGRO (tinta): diseñamos los dos bloques de 2x2 de forma que **en cada
-      subposición** al menos una de las sombras tenga BLACK = [0,0,0]. Así, al multiplicar,
-      el resultado es BLACK puro en toda la celda 2x2.
+    Perfect Black con negro PURO absoluto usando complementarios exactos.
+    
+    Para PIXEL NEGRO: usamos colores complementarios matemáticos que al
+    multiplicarse (modelo sustractivo) dan [0,0,0] (negro puro).
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
@@ -120,60 +158,68 @@ def generate_perfect_black(secret_mask, cover_arr, *, seed=None):
     s2 = np.zeros((h * 2, w * 2, 3), dtype=np.uint8)
     white = np.array([255, 255, 255], dtype=np.uint8)
     black = np.array([0, 0, 0], dtype=np.uint8)
-    inv_cover = 255 - cover_arr
 
     for r in range(h):
         for c in range(w):
             color = cover_arr[r, c]
-            inv   = inv_cover[r, c]
+            # Complementario matemático para multiplicación = negro
+            inv = 255 - color
             flip = rng.random() > 0.5
 
-            # Matriz Diagonal (opción de fondo)
-            mat_diag = np.stack([
-                np.stack([color, white]),
-                np.stack([white, color])
-            ])
-
-            # Matriz Antidiagonal (opción de fondo alternativa)
-            mat_anti_spatial = np.stack([
-                np.stack([white, color]),
-                np.stack([color, white])
-            ])
-
-            if secret_mask[r, c]:  # SECRETO BLANCO -> ambas sombras iguales
-                base = mat_diag if flip else mat_anti_spatial
-                s1[r*2:r*2+2, c*2:c*2+2] = base
-                s2[r*2:r*2+2, c*2:c*2+2] = base
-            else:  # SECRETO NEGRO -> patrón estricto que garantiza NEGRO al superponer
-                # Estrategia: para cada una de las 4 posiciones (2x2) ponemos BLACK en
-                # al menos una de las dos sombras.
-                # Construimos:
-                #   s1_blk = [[C, BLACK],
-                #             [BLACK, C]]
-                #   s2_blk = [[BLACK, inv],
-                #             [inv, BLACK]]
-                # Resultado por posición (multiplicación):
-                #   (C * BLACK) = BLACK
-                #   (BLACK * inv) = BLACK
-                #   etc -> Toda la celda 2x2 queda BLACK.
-                s1_blk = np.stack([
+            if secret_mask[r, c]:  # SECRETO BLANCO (fondo)
+                # Patrón diagonal idéntico en ambas sombras
+                # Resultado: luz pasa → blanco visible
+                mat_base = np.stack([
+                    np.stack([color, white]),
+                    np.stack([white, color])
+                ])
+                
+                if flip:
+                    # Antidiagonal
+                    mat_base = np.stack([
+                        np.stack([white, color]),
+                        np.stack([color, white])
+                    ])
+                
+                s1[r*2:r*2+2, c*2:c*2+2] = mat_base
+                s2[r*2:r*2+2, c*2:c*2+2] = mat_base
+            
+            else:  # SECRETO NEGRO
+                # Estrategia: colores complementarios en posiciones coincidentes
+                # Color × (255-Color) ≈ 0 → negro puro
+                
+                # Sombra 1: diagonal con color
+                s1_mat = np.stack([
                     np.stack([color, black]),
                     np.stack([black, color])
                 ])
-                s2_blk = np.stack([
-                    np.stack([black, inv]),
-                    np.stack([inv, black])
+                
+                # Sombra 2: diagonal con complementario en las MISMAS posiciones
+                s2_mat = np.stack([
+                    np.stack([inv, white]),
+                    np.stack([white, inv])
                 ])
 
-                # Si queremos alternar orientación visual para estética, podemos rotar
-                # los bloques cuando flip=True (manteniendo la propiedad de bloqueo).
+                # Resultado al superponer:
+                # pos[0,0]: color × inv = ~0 (negro)
+                # pos[0,1]: black × white = 0 (negro)
+                # pos[1,0]: black × white = 0 (negro)
+                # pos[1,1]: color × inv = ~0 (negro)
+                # → Toda la celda 2x2 queda NEGRA
+                
                 if flip:
-                    # rota 90 grados (equivalente a transpose + flip)
-                    s1_blk = np.rot90(s1_blk, k=1, axes=(0,1))
-                    s2_blk = np.rot90(s2_blk, k=1, axes=(0,1))
-
-                s1[r*2:r*2+2, c*2:c*2+2] = s1_blk
-                s2[r*2:r*2+2, c*2:c*2+2] = s2_blk
+                    # Antidiagonal alternativa
+                    s1_mat = np.stack([
+                        np.stack([black, color]),
+                        np.stack([color, black])
+                    ])
+                    s2_mat = np.stack([
+                        np.stack([white, inv]),
+                        np.stack([inv, white])
+                    ])
+                
+                s1[r*2:r*2+2, c*2:c*2+2] = s1_mat
+                s2[r*2:r*2+2, c*2:c*2+2] = s2_mat
 
     return Image.fromarray(s1), Image.fromarray(s2)
 
