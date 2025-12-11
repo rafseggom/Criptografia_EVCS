@@ -47,6 +47,7 @@ with col_b:
             "Construcción 1 · Básico RGB",
             "Construcción 2 · (2,2) VCS",
             "Construcción 3 · Perfect Black",
+            "Construcción 4 · Simple 6-Color",
         ),
         index=2,
     )
@@ -55,6 +56,8 @@ with col_b:
         st.caption("m=2 horizontal, contraste estándar y colores originales.")
     elif "(2,2)" in algo:
         st.caption("m=2 horizontal, n=2 participantes, k=2 umbral (todos necesarios).")
+    elif "Simple" in algo:
+        st.caption("m=2, colores RGB/CMY aleatorios, esquema original de Yang et al.")
     else:
         st.caption("m=4 (2x2), negro sólido perfecto y revelado nítido.")
 
@@ -132,6 +135,10 @@ def _generate_multi():
         st.warning("Perfect Black está disponible solo para 2 participantes en esta demo. Usa Básico o (2,2) VCS.")
         return
     
+    if "Simple" in algo and n_participants != 2:
+        st.warning("Simple 6-Color está disponible solo para 2 participantes. Usa Básico o (2,2) VCS.")
+        return
+    
     with st.spinner("Aplicando EVCS con sombras personalizadas..."):
         secret_preview, _, mask, _ = logic.prepare_inputs(
             secret_file, cover_files[0], invert=invert_secret, size=size, dither=dither
@@ -151,9 +158,12 @@ def _generate_multi():
             shares = logic.generate_basic_multi(mask, cover_arrs)
         elif "(2,2)" in algo:
             shares = logic.generate_2_2_vcs_multi(mask, cover_arrs)
+        elif "Simple" in algo:
+            shares = logic.generate_simple_6color(mask, cover_arrs)
         else:
             # Perfect Black solo para 2 participantes
-            shares = logic.generate_basic_multi(mask, cover_arrs)
+            s1, s2 = logic.generate_perfect_black(mask, cover_arrs[0])
+            shares = [s1, s2]
     
     st.session_state.update({
         "secret_prev_multi": secret_preview,
@@ -198,6 +208,20 @@ if n_participants == 2:
                   - Superposición: **Blanco** ✓
                 
                 Expansión de píxel m=2 horizontal. Sin una sombra no se revela nada.
+                """)
+            elif "Simple" in algo:
+                st.markdown("""
+                **Construcción 4: Simple 6-Color (Yang et al. 2015)**
+                
+                Esquema básico con 6 colores primarios {R, G, B, C, M, Y}:
+                - **Píxel NEGRO (secreto)**: Colores complementarios coincidentes
+                  - Ejemplo: [Rojo | Cian] × [Rojo | Cian] = **Negro puro** ✓
+                  - Los complementarios se anulan: R×C = 0, G×M = 0, B×Y = 0
+                - **Píxel BLANCO (fondo)**: Colores aleatorios NO coincidentes
+                  - Ejemplo: [Rojo | Verde] × [Azul | Magenta] = **Colores** ✓
+                  - No hay superposición de complementarios → fondo colorido
+                
+                m=2 horizontal, aleatorización total, máximo contraste visual.
                 """)
             else:
                 st.markdown("""

@@ -310,3 +310,94 @@ def generate_complementary_multi(secret_mask, cover_arrs, *, seed=None):
                     shares[i][r, c*2 : c*2+2] = pattern
 
     return [Image.fromarray(s) for s in shares]
+
+
+def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
+    """
+    Construcción 4: Simple 6-Color según Yang et al. (2015)
+    
+    Esquema puro con 6 colores primarios aleatorios.
+    
+    Usa los 6 colores primarios del modelo RGB + CMY:
+    - Colores: Red, Green, Blue, Cyan, Magenta, Yellow
+    - Complementarios: R↔C, G↔M, B↔Y
+    
+    Principio CORRECTO:
+    - Píxel NEGRO del SECRETO: Complementarios en MISMAS posiciones
+      → S1[pos0]=R y S2[pos0]=C → R×C = Negro
+      → S1[pos1]=G y S2[pos1]=M → G×M = Negro
+      → Resultado: TODO NEGRO
+      
+    - Píxel BLANCO del SECRETO: NO complementarios en MISMAS posiciones
+      → S1[pos0]=R y S2[pos0]=G → R×G = Color oscuro pero NO negro
+      → Resultado: COLORES (no negro)
+    """
+    rng = np.random.default_rng(seed)
+    h, w = secret_mask.shape
+    n = len(cover_arrs)
+    
+    if n != 2:
+        raise ValueError("Simple 6-Color requiere exactamente 2 participantes")
+    
+    shares = [np.zeros((h, w * 2, 3), dtype=np.uint8) for _ in range(2)]
+    
+    # 6 colores primarios RGB + CMY (valores puros para máximo contraste)
+    colors = {
+        0: np.array([255, 0, 0], dtype=np.uint8),      # Red
+        1: np.array([0, 255, 0], dtype=np.uint8),      # Green
+        2: np.array([0, 0, 255], dtype=np.uint8),      # Blue
+        3: np.array([0, 255, 255], dtype=np.uint8),    # Cyan
+        4: np.array([255, 0, 255], dtype=np.uint8),    # Magenta
+        5: np.array([255, 255, 0], dtype=np.uint8),    # Yellow
+    }
+    
+    # Pares complementarios: R↔C(0↔3), G↔M(1↔4), B↔Y(2↔5)
+    complementary = {0: 3, 3: 0, 1: 4, 4: 1, 2: 5, 5: 2}
+
+    for r in range(h):
+        for c in range(w):
+            
+            if secret_mask[r, c]:  # BLANCO del SECRETO (fondo)
+                # Elegir 2 colores aleatorios para cada posición del píxel expandido
+                # IMPORTANTE: NO deben ser complementarios entre sombras en la MISMA posición
+                
+                # Posición 0 del píxel expandido
+                c1_pos0 = rng.integers(0, 6)
+                c2_pos0 = rng.integers(0, 6)
+                # Asegurar que NO sean complementarios
+                while c2_pos0 == complementary[c1_pos0]:
+                    c2_pos0 = rng.integers(0, 6)
+                
+                # Posición 1 del píxel expandido
+                c1_pos1 = rng.integers(0, 6)
+                c2_pos1 = rng.integers(0, 6)
+                # Asegurar que NO sean complementarios
+                while c2_pos1 == complementary[c1_pos1]:
+                    c2_pos1 = rng.integers(0, 6)
+                
+                shares[0][r, c*2] = colors[c1_pos0]
+                shares[0][r, c*2+1] = colors[c1_pos1]
+                
+                shares[1][r, c*2] = colors[c2_pos0]
+                shares[1][r, c*2+1] = colors[c2_pos1]
+            
+            else:  # NEGRO del SECRETO
+                # Elegir colores complementarios para CADA posición
+                # S1 y S2 deben tener complementarios en las MISMAS posiciones
+                
+                # Posición 0: elegir un color base y su complementario
+                base0 = rng.integers(0, 6)
+                comp0 = complementary[base0]
+                
+                # Posición 1: elegir otro par (puede ser el mismo o diferente)
+                base1 = rng.integers(0, 6)
+                comp1 = complementary[base1]
+                
+                # S1 tiene los colores base, S2 tiene los complementarios
+                shares[0][r, c*2] = colors[base0]
+                shares[0][r, c*2+1] = colors[base1]
+                
+                shares[1][r, c*2] = colors[comp0]
+                shares[1][r, c*2+1] = colors[comp1]
+
+    return [Image.fromarray(s) for s in shares]
