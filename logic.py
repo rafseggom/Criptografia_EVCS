@@ -145,73 +145,99 @@ def generate_complementary(secret_mask, cover_arr, *, seed=None):
     return Image.fromarray(s1), Image.fromarray(s2)
 
 
+def generate_2_2_vcs_multi(secret_mask, cover_arrs, *, seed=None):
+    """
+    (2,2) VCS según Yang et al. (2015): n=2 participantes, k=2 umbral, m=2 expansión.
+    
+    Matriz base para (2,2) VCS:
+    - Píxel BLANCO: C0 = [[C,W], [W,C]] → patrones complementarios
+    - Píxel NEGRO: C1 = [[C,W], [C,W]] → mismo patrón
+    """
+    rng = np.random.default_rng(seed)
+    h, w = secret_mask.shape
+    n = len(cover_arrs)
+    shares = [np.zeros((h, w * 2, 3), dtype=np.uint8) for _ in range(n)]
+    white = np.array([255, 255, 255], dtype=np.uint8)
+
+    for r in range(h):
+        for c in range(w):
+            flip = rng.random() > 0.5
+            
+            if secret_mask[r, c]:  # BLANCO (fondo)
+                # Patrones complementarios: cada participante recibe patrón opuesto
+                for i in range(n):
+                    color = cover_arrs[i][r, c]
+                    
+                    if i % 2 == 0:
+                        pattern = np.stack([color, white]) if flip else np.stack([white, color])
+                    else:
+                        pattern = np.stack([white, color]) if flip else np.stack([color, white])
+                    
+                    shares[i][r, c*2 : c*2+2] = pattern
+            
+            else:  # NEGRO (secreto)
+                # Mismo patrón para todos (cohesión)
+                for i in range(n):
+                    color = cover_arrs[i][r, c]
+                    pattern = np.stack([color, white]) if flip else np.stack([white, color])
+                    shares[i][r, c*2 : c*2+2] = pattern
+
+    return [Image.fromarray(s) for s in shares]
+
+
 def generate_perfect_black(secret_mask, cover_arr, *, seed=None):
     """
-    Construcción 4: "True Perfect Black" (Forzado).
+    Perfect Black con negro PURO absoluto usando complementarios exactos.
     
-    Lógica Matemática:
-    A diferencia del esquema estándar que confía en el promedio visual, este método 
-    fuerza matemáticamente el valor (0,0,0) en la superposición del secreto.
-    
-    Expansión m=4 (Bloque 2x2):
-    - Se definen matrices diagonales y antidiagonales.
-    - Se introduce 'tinta negra' (0,0,0) explícita en las sombras para garantizar
-      que al multiplicar las matrices, el resultado sea cero en todas las posiciones.
+    Para PIXEL NEGRO: usamos colores complementarios matemáticos que al
+    multiplicarse (modelo sustractivo) dan [0,0,0] (negro puro).
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
     s1 = np.zeros((h * 2, w * 2, 3), dtype=np.uint8)
     s2 = np.zeros((h * 2, w * 2, 3), dtype=np.uint8)
     white = np.array([255, 255, 255], dtype=np.uint8)
-    black = np.array([0, 0, 0], dtype=np.uint8) # Elemento absorbente del grupo multiplicativo
-    inv_cover = 255 - cover_arr
+    black = np.array([0, 0, 0], dtype=np.uint8)
 
     for r in range(h):
         for c in range(w):
             color = cover_arr[r, c]
-            inv   = inv_cover[r, c]
+            # Complementario matemático para multiplicación = negro
+            inv = 255 - color
             flip = rng.random() > 0.5
 
-            # Matriz Diagonal Base (Fondo)
-            # [C, W]
-            # [W, C]
-            mat_diag = np.stack([
-                np.stack([color, white]),
-                np.stack([white, color])
-            ])
-
-            # Matriz Antidiagonal Base
-            # [W, C]
-            # [C, W]
-            mat_anti_spatial = np.stack([
-                np.stack([white, color]),
-                np.stack([color, white])
-            ])
-
-            if secret_mask[r, c]:  
-                # Caso BLANCO: Ambas sombras idénticas.
-                # La luz pasa a través de las coincidencias.
-                base = mat_diag if flip else mat_anti_spatial
-                s1[r*2:r*2+2, c*2:c*2+2] = base
-                s2[r*2:r*2+2, c*2:c*2+2] = base
-            else:  
-                # Caso NEGRO: Construcción de matrices de aniquilación.
-                # Objetivo: S1 * S2 = Matriz de ceros (Negro total).
+            if secret_mask[r, c]:  # SECRETO BLANCO (fondo)
+                # Patrón diagonal idéntico en ambas sombras
+                # Resultado: luz pasa → blanco visible
+                mat_base = np.stack([
+                    np.stack([color, white]),
+                    np.stack([white, color])
+                ])
                 
-                # S1 contiene el color y tinta negra:
-                # [C, K]
-                # [K, C]
-                s1_blk = np.stack([
+                if flip:
+                    # Antidiagonal
+                    mat_base = np.stack([
+                        np.stack([white, color]),
+                        np.stack([color, white])
+                    ])
+                
+                s1[r*2:r*2+2, c*2:c*2+2] = mat_base
+                s2[r*2:r*2+2, c*2:c*2+2] = mat_base
+            
+            else:  # SECRETO NEGRO
+                # Estrategia: colores complementarios en posiciones coincidentes
+                # Color × (255-Color) ≈ 0 → negro puro
+                
+                # Sombra 1: diagonal con color
+                s1_mat = np.stack([
                     np.stack([color, black]),
                     np.stack([black, color])
                 ])
                 
-                # S2 contiene tinta negra y el inverso (para matar al color C):
-                # [K, I]
-                # [I, K]
-                s2_blk = np.stack([
-                    np.stack([black, inv]),
-                    np.stack([inv, black])
+                # Sombra 2: diagonal con complementario en las MISMAS posiciones
+                s2_mat = np.stack([
+                    np.stack([inv, white]),
+                    np.stack([white, inv])
                 ])
                 
                 # Verificación algebraica de la superposición (elemento a elemento):
@@ -221,13 +247,26 @@ def generate_perfect_black(secret_mask, cover_arr, *, seed=None):
                 # Pos (1,1): C * K = C * 0 = 0 (Negro)
                 # Resultado: Bloque 2x2 completamente negro.
 
-                # Rotación de matrices para aleatoriedad espacial
+                # Resultado al superponer:
+                # pos[0,0]: color × inv = ~0 (negro)
+                # pos[0,1]: black × white = 0 (negro)
+                # pos[1,0]: black × white = 0 (negro)
+                # pos[1,1]: color × inv = ~0 (negro)
+                # → Toda la celda 2x2 queda NEGRA
+                
                 if flip:
-                    s1_blk = np.rot90(s1_blk, k=1, axes=(0,1))
-                    s2_blk = np.rot90(s2_blk, k=1, axes=(0,1))
-
-                s1[r*2:r*2+2, c*2:c*2+2] = s1_blk
-                s2[r*2:r*2+2, c*2:c*2+2] = s2_blk
+                    # Antidiagonal alternativa
+                    s1_mat = np.stack([
+                        np.stack([black, color]),
+                        np.stack([color, black])
+                    ])
+                    s2_mat = np.stack([
+                        np.stack([white, inv]),
+                        np.stack([inv, white])
+                    ])
+                
+                s1[r*2:r*2+2, c*2:c*2+2] = s1_mat
+                s2[r*2:r*2+2, c*2:c*2+2] = s2_mat
 
     return Image.fromarray(s1), Image.fromarray(s2)
 
@@ -334,3 +373,158 @@ def generate_complementary_multi(secret_mask, cover_arrs, *, seed=None):
                     shares[i][r, c*2 : c*2+2] = pattern
 
     return [Image.fromarray(s) for s in shares]
+
+
+def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
+    """
+    Construcción 4: Simple 6-Color según Yang et al. (2015)
+    
+    Esquema puro con 6 colores primarios aleatorios.
+    
+    Usa los 6 colores primarios del modelo RGB + CMY:
+    - Colores: Red, Green, Blue, Cyan, Magenta, Yellow
+    - Complementarios: R↔C, G↔M, B↔Y
+    
+    Principio CORRECTO:
+    - Píxel NEGRO del SECRETO: Complementarios en MISMAS posiciones
+      → S1[pos0]=R y S2[pos0]=C → R×C = Negro
+      → S1[pos1]=G y S2[pos1]=M → G×M = Negro
+      → Resultado: TODO NEGRO
+      
+    - Píxel BLANCO del SECRETO: NO complementarios en MISMAS posiciones
+      → S1[pos0]=R y S2[pos0]=G → R×G = Color oscuro pero NO negro
+      → Resultado: COLORES (no negro)
+    """
+    rng = np.random.default_rng(seed)
+    h, w = secret_mask.shape
+    n = len(cover_arrs)
+    
+    if n != 2:
+        raise ValueError("Simple 6-Color requiere exactamente 2 participantes")
+    
+    shares = [np.zeros((h, w * 2, 3), dtype=np.uint8) for _ in range(2)]
+    
+    # 6 colores primarios RGB + CMY (valores puros para máximo contraste)
+    colors = {
+        0: np.array([255, 0, 0], dtype=np.uint8),      # Red
+        1: np.array([0, 255, 0], dtype=np.uint8),      # Green
+        2: np.array([0, 0, 255], dtype=np.uint8),      # Blue
+        3: np.array([0, 255, 255], dtype=np.uint8),    # Cyan
+        4: np.array([255, 0, 255], dtype=np.uint8),    # Magenta
+        5: np.array([255, 255, 0], dtype=np.uint8),    # Yellow
+    }
+    
+    # Pares complementarios: R↔C(0↔3), G↔M(1↔4), B↔Y(2↔5)
+    complementary = {0: 3, 3: 0, 1: 4, 4: 1, 2: 5, 5: 2}
+
+    for r in range(h):
+        for c in range(w):
+            
+            if secret_mask[r, c]:  # BLANCO del SECRETO (fondo)
+                # Elegir 2 colores aleatorios para cada posición del píxel expandido
+                # IMPORTANTE: NO deben ser complementarios entre sombras en la MISMA posición
+                
+                # Posición 0 del píxel expandido
+                c1_pos0 = rng.integers(0, 6)
+                c2_pos0 = rng.integers(0, 6)
+                # Asegurar que NO sean complementarios
+                while c2_pos0 == complementary[c1_pos0]:
+                    c2_pos0 = rng.integers(0, 6)
+                
+                # Posición 1 del píxel expandido
+                c1_pos1 = rng.integers(0, 6)
+                c2_pos1 = rng.integers(0, 6)
+                # Asegurar que NO sean complementarios
+                while c2_pos1 == complementary[c1_pos1]:
+                    c2_pos1 = rng.integers(0, 6)
+                
+                shares[0][r, c*2] = colors[c1_pos0]
+                shares[0][r, c*2+1] = colors[c1_pos1]
+                
+                shares[1][r, c*2] = colors[c2_pos0]
+                shares[1][r, c*2+1] = colors[c2_pos1]
+            
+            else:  # NEGRO del SECRETO
+                # Elegir colores complementarios para CADA posición
+                # S1 y S2 deben tener complementarios en las MISMAS posiciones
+                
+                # Posición 0: elegir un color base y su complementario
+                base0 = rng.integers(0, 6)
+                comp0 = complementary[base0]
+                
+                # Posición 1: elegir otro par (puede ser el mismo o diferente)
+                base1 = rng.integers(0, 6)
+                comp1 = complementary[base1]
+                
+                # S1 tiene los colores base, S2 tiene los complementarios
+                shares[0][r, c*2] = colors[base0]
+                shares[0][r, c*2+1] = colors[base1]
+                
+                shares[1][r, c*2] = colors[comp0]
+                shares[1][r, c*2+1] = colors[comp1]
+
+    return [Image.fromarray(s) for s in shares]
+
+def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
+    """
+    Construcción 5: EVCS Coloreado Mejorado (Anti-Ghosting).
+    
+    Ajuste: cada sombra decide su color según su propia preferencia y azar,
+    evitando que una sombra filtre información del secreto o de la otra cobertura.
+    """
+    rng = np.random.default_rng(seed)
+    h, w = secret_mask.shape
+
+    if len(cover_arrs) != 2:
+        raise ValueError("Construcción 5 requiere exactamente 2 coberturas.")
+
+    s1 = np.zeros((h, w * 2, 3), dtype=np.uint8)
+    s2 = np.zeros((h, w * 2, 3), dtype=np.uint8)
+
+    palette = np.array([
+        [255, 0, 0],   # 0 R
+        [0, 255, 0],   # 1 G
+        [0, 0, 255],   # 2 B
+        [0, 255, 255], # 3 C
+        [255, 0, 255], # 4 M
+        [255, 255, 0], # 5 Y
+    ], dtype=np.uint8)
+    comp = {0:3, 1:4, 2:5, 3:0, 4:1, 5:2}
+    DARKS, LIGHTS = [0,1,2], [3,4,5]
+
+    # Preferencias por cover: True=fondo (claro), False=texto (oscuro)
+    wants_light = []
+    for carr in cover_arrs:
+        gray = np.mean(carr, axis=2)
+        wants_light.append(gray > 128)
+
+    for r in range(h):
+        for c in range(w):
+            secret_white = secret_mask[r, c]
+            c1_pref_light = wants_light[0][r, c]
+            c2_pref_light = wants_light[1][r, c]
+            pool1 = LIGHTS if c1_pref_light else DARKS
+            pool2 = LIGHTS if c2_pref_light else DARKS
+
+            for sub in range(2):
+                if secret_white:
+                    # Secreto blanco: NO complementarios
+                    c1_idx = int(rng.choice(pool1)) if len(pool1) else int(rng.integers(0, 6))
+                    # elegir para S2 algo que NO sea complementario de c1
+                    noncomp2 = [i for i in pool2 if i != comp[c1_idx]]
+                    if not noncomp2:
+                        noncomp2 = [i for i in range(6) if i != comp[c1_idx]]
+                    c2_idx = int(rng.choice(noncomp2))
+                else:
+                    # Secreto negro: complementarios, alternando prioridad
+                    if rng.random() > 0.5:
+                        c1_idx = int(rng.choice(pool1)) if len(pool1) else int(rng.integers(0, 6))
+                        c2_idx = comp[c1_idx]
+                    else:
+                        c2_idx = int(rng.choice(pool2)) if len(pool2) else int(rng.integers(0, 6))
+                        c1_idx = comp[c2_idx]
+
+                s1[r, c*2 + sub] = palette[c1_idx]
+                s2[r, c*2 + sub] = palette[c2_idx]
+
+    return [Image.fromarray(s1), Image.fromarray(s2)]
