@@ -48,19 +48,22 @@ with col_b:
             "Construcción 2 · (2,2) VCS",
             "Construcción 3 · Perfect Black",
             "Construcción 4 · Simple 6-Color",
-            "Construcción 5 · EVCS", 
+            "Construcción 5 · EVCS Coloreado Mejorado", # OPCIÓN NUEVA
         ),
-        index=1, 
+        index=0, 
     )
     size = st.slider("Tamaño base (px)", 320, 900, 640, step=40)
+    
     if "Básico" in algo:
-        st.caption("m=2 horizontal, contraste estándar y colores originales.")
+        st.caption("m=2, esquema estándar.")
     elif "(2,2)" in algo:
-        st.caption("m=2 horizontal, n=2 participantes, k=2 umbral (todos necesarios).")
+        st.caption("m=2, esquema umbral k=2.")
     elif "Simple" in algo:
-        st.caption("m=2, colores RGB/CMY aleatorios, esquema original de Yang et al.")
+        st.caption("m=2, colores aleatorios, gran contraste de secreto.")
+    elif "EVCS" in algo:
+        st.caption("m=2, Anti-Ghosting, revela covers y secreto.")
     else:
-        st.caption("m=4 (2x2), negro sólido perfecto y revelado nítido.")
+        st.caption("m=4 (2x2), negro sólido perfecto.")
 
 st.markdown("---")
 
@@ -133,25 +136,19 @@ def _generate_multi():
         return
     
     if "Perfect Black" in algo and n_participants != 2:
-        st.warning("Perfect Black está disponible solo para 2 participantes en esta demo. Usa Básico o (2,2) VCS.")
+        st.warning("Perfect Black está disponible solo para 2 participantes en esta demo.")
         return
     
     if "Simple" in algo and n_participants != 2:
-        st.warning("Simple 6-Color está disponible solo para 2 participantes. Usa Básico o (2,2) VCS.")
+        st.warning("Simple 6-Color está disponible solo para 2 participantes.")
         return
     
-    with st.spinner("Aplicando EVCS con sombras personalizadas..."):
+    with st.spinner("Procesando criptografía visual..."):
         secret_preview, _, mask, _ = logic.prepare_inputs(
             secret_file, cover_files[0], invert=invert_secret, size=size, dither=dither
         )
-        # Preparar todas las imágenes de cobertura
         cover_arrs = [
             logic.prepare_inputs(secret_file, cover_file, invert=invert_secret, size=size, dither=dither)[3]
-            for cover_file in cover_files
-        ]
-        
-        cover_previews = [
-            logic.prepare_inputs(secret_file, cover_file, invert=invert_secret, size=size, dither=dither)[1]
             for cover_file in cover_files
         ]
         
@@ -162,15 +159,15 @@ def _generate_multi():
         elif "Simple" in algo:
             shares = logic.generate_simple_6color(mask, cover_arrs)
         elif "EVCS" in algo: 
-            shares = logic.generate_evcs_colored(mask, cover_arrs)
+            # Construcción 5: usar las 2 primeras covers
+            current_covers = cover_arrs[:2]
+            shares = logic.generate_evcs_colored(mask, current_covers)
         else:
-            # Perfect Black solo para 2 participantes
             s1, s2 = logic.generate_perfect_black(mask, cover_arrs[0])
             shares = [s1, s2]
     
     st.session_state.update({
         "secret_prev_multi": secret_preview,
-        "cover_prev_multi": cover_previews,
         "shares_multi": shares,
         "generated_multi": True,
         "n_part": n_participants,
@@ -226,19 +223,19 @@ if n_participants == 2:
                 
                 m=2 horizontal, aleatorización total, máximo contraste visual.
                 """)
-            elif "EVCS" in algo: # <--- NUEVO
+            elif "EVCS" in algo:
                 st.markdown("""
                 **Construcción 5: EVCS Coloreado (Propuesta del Grupo)**
                 
-                Mejora sobre el esquema de 6 colores para incluir la propiedad EVCS (Extended Visual Cryptography):
+                Mejora heurística sobre la construcción 4 para ocultar imágenes en las sombras.
                 
-                - **Objetivo**: Que las sombras no sean ruido aleatorio, sino que muestren las imágenes de los participantes (Cover 1 y Cover 2).
-                - **Técnica**: Sesgo de probabilidad cromática.
-                  - Si el píxel de *Cover* es texto (oscuro), forzamos colores base (R, G, B).
-                  - Si el píxel de *Cover* es fondo (claro), forzamos colores mezcla (C, M, Y).
-                - **Recuperación del Secreto**:
-                  - Se mantiene la regla matemática: Colores complementarios generan negro (secreto), colores no complementarios generan color (fondo).
-                  - El algoritmo busca combinaciones que satisfagan *simultáneamente* la visibilidad del secreto y la apariencia de las sombras.
+                - **Gestión de Conflicto (Anti-Ghosting)**: 
+                  Cuando el secreto exige un par complementario (Negro) pero ambas imágenes de cobertura quieren el mismo tipo de color (ej. ambas son texto negro), el algoritmo no favorece siempre a la Sombra 1.
+                  Aleatoriza quién "gana" el píxel correcto. Esto convierte el "fantasma" de la otra imagen en ruido aleatorio difuso.
+                
+                - **Paleta de Colores**:
+                  - Oscuros (R,G,B) para representar tinta negra.
+                  - Claros (C,M,Y) para representar fondo blanco.
                 """)
             else:
                 st.markdown("""
