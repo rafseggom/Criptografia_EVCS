@@ -118,13 +118,15 @@ def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
 # --- MÉTODO 3 (EVCS REAL) ---
 def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     """
-    Construcción 3: CBW-EVCS (Esquema Extendido) - Versión Final Anti-Ghosting.
+    Construcción 3: CBW-EVCS (Esquema Extendido) - Optimizado.
     
-    Mejoras aplicadas:
-    1. Dithering Aleatorio: Rompe las estructuras visuales (bordes de letras) de las 
-       coberturas para que, al superponerse, se mezclen con el ruido de fondo
-       y no sean legibles (elimina el ghosting).
-    2. Permutación de Columnas: Baraja los subpíxeles para evitar patrones verticales.
+    Solución al Ghosting:
+    1. Pre-aclarado de Coberturas: Reducimos la densidad de tinta para evitar 
+       manchas oscuras visibles en la superposición.
+    2. Floyd-Steinberg Dithering: Distribución suave de puntos.
+    3. Permutación de Columnas: Rompe patrones verticales.
+    
+    Implementación rigurosa de Yang et al. Construcción 2.
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
@@ -132,52 +134,48 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     if len(cover_arrs) < 2:
         raise ValueError("Este esquema requiere al menos 2 imágenes de cobertura.")
 
-    # 1. Dithering Aleatorio (Random Dithering)
-    # Convertimos las covers a escala de grises (Luminancia)
-    c1_gray = np.array(Image.fromarray(cover_arrs[0]).convert("L"))
-    c2_gray = np.array(Image.fromarray(cover_arrs[1]).convert("L"))
+    # 1. Preprocesamiento de Coberturas (Clave Anti-Ghosting)
+    c1_img = Image.fromarray(cover_arrs[0]).convert("L")
+    c2_img = Image.fromarray(cover_arrs[1]).convert("L")
     
-    # Generamos una matriz de ruido aleatorio (0-255)
-    # Si el píxel de la imagen es más oscuro que el ruido aleatorio -> Tinta (Negro)
-    # Esto dispersa los píxeles negros sin crear bordes sólidos reconocibles en la suma.
-    noise_matrix = rng.integers(0, 256, size=(h, w))
-    
-    # True = Fondo (Blanco), False = Tinta (Negro)
-    c1_bg = c1_gray > noise_matrix
-    c2_bg = c2_gray > noise_matrix
+    # Aumentamos el brillo/gamma para reducir la cantidad de píxeles negros (tinta)
+    # Esto hace que la "imagen fantasma" sea mucho más sutil en la superposición
+    # sin perder legibilidad en la sombra individual.
+    c1_img = c1_img.point(lambda p: p * 1.5 + 50) 
+    c2_img = c2_img.point(lambda p: p * 1.5 + 50)
+
+    # Convertimos a '1' (B/N con Dithering Floyd-Steinberg)
+    # 0=Negro(Tinta), 255=Blanco(Fondo)
+    c1_bg = np.array(c1_img.convert("1")) 
+    c2_bg = np.array(c2_img.convert("1"))
 
     s1 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     s2 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     
-    # Paleta completa S(1) = {R, G, B, C, M, Y}
+    # [cite_start]Paleta Completa RGBCMY [cite: 532]
     palette = np.array([
         [255, 0, 0], [0, 255, 0], [0, 0, 255],     
         [0, 255, 255], [255, 0, 255], [255, 255, 0]
     ], dtype=np.uint8)
     
     black_pixel = np.array([0, 0, 0], dtype=np.uint8)
-    
-    # Mapa de Complementarios: R-C, G-M, B-Y
     comp_map = np.array([3, 4, 5, 0, 1, 2])
 
-    # Pre-cálculo de colores aleatorios base
     rand_cols = rng.integers(0, 6, size=(h, w, 2))
-    
-    # Decisión de permutación de columnas (Shuffle): 0 o 1
     perms = rng.integers(0, 2, size=(h, w))
 
     for r in range(h):
         for c in range(w):
             sec_white = secret_mask[r, c]
-            c1_white = c1_bg[r, c] 
+            c1_white = c1_bg[r, c] # True(255) si es fondo
             c2_white = c2_bg[r, c] 
             
             idx_a = rand_cols[r, c, 0]
             idx_b = rand_cols[r, c, 1]
             
-            # --- MATRICES BASE (Yang et al.) ---
+            # [cite_start]--- MATRICES BASE (Yang et al. Eq 3) [cite: 533-539] ---
             
-            # CASO 1: Ambas Coberturas son Fondo (Blanco)
+            # CASO 1: Ambas Fondo (Blanco)
             if c1_white and c2_white:
                 if sec_white:
                     row1 = [idx_a, idx_b]
@@ -186,25 +184,26 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
                     row1 = [idx_a, idx_b]
                     row2 = [comp_map[idx_a], comp_map[idx_b]]
 
-            # CASO 2: C1 Fondo, C2 Tinta (Negro)
+            # CASO 2: C1 Fondo, C2 Tinta
             elif c1_white and not c2_white:
                 if sec_white:
                     row1 = [idx_a, idx_b]
-                    row2 = [idx_a, -1] # -1 indica Negro
+                    row2 = [idx_a, -1] # -1 = Negro
                 else:
                     row1 = [idx_a, idx_b]
                     row2 = [comp_map[idx_a], -1]
 
-            # CASO 3: C1 Tinta (Negro), C2 Fondo
+            # CASO 3: C1 Tinta, C2 Fondo
             elif not c1_white and c2_white:
                 if sec_white:
                     row1 = [idx_a, -1]
                     row2 = [idx_a, idx_b]
                 else:
+                    # Usamos 'b' para mantener variabilidad en S2
                     row1 = [idx_a, -1]
-                    row2 = [comp_map[idx_a], idx_b] 
+                    row2 = [comp_map[idx_a], idx_b]
 
-            # CASO 4: Ambas Tinta (Negro)
+            # CASO 4: Ambas Tinta
             else:
                 if sec_white:
                     row1 = [idx_a, -1]
@@ -213,9 +212,7 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
                     row1 = [idx_a, -1]
                     row2 = [comp_map[idx_a], -1]
 
-            # --- PERMUTACIÓN DE COLUMNAS (SHUFFLE) ---
-            # Intercambiamos la posición izquierda/derecha aleatoriamente.
-            # Esto rompe la coherencia vertical de las formas "fantasmas".
+            # --- PERMUTACIÓN DE COLUMNAS ---
             if perms[r, c] == 1:
                 row1 = [row1[1], row1[0]]
                 row2 = [row2[1], row2[0]]
