@@ -118,16 +118,13 @@ def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
 # --- MÉTODO 3 (EVCS REAL) ---
 def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     """
-    Construcción 3: CBW-EVCS (Esquema Extendido).
-    Implementación rigurosa basada en Yang et al. (Construcción 2 del paper).
+    Construcción 3: CBW-EVCS (Esquema Extendido) - Versión Final Anti-Ghosting.
     
-    Utiliza 4 casos matemáticos para determinar los subpíxeles basándose en:
-    1. Bit del Secreto (Blanco/Negro)
-    2. Bit de la Cobertura 1 (Fondo/Forma)
-    3. Bit de la Cobertura 2 (Fondo/Forma)
-    
-    Garantiza que cada sombra muestre su imagen de cobertura y que
-    la superposición revele el secreto.
+    Mejoras aplicadas:
+    1. Dithering Aleatorio: Rompe las estructuras visuales (bordes de letras) de las 
+       coberturas para que, al superponerse, se mezclen con el ruido de fondo
+       y no sean legibles (elimina el ghosting).
+    2. Permutación de Columnas: Baraja los subpíxeles para evitar patrones verticales.
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
@@ -135,100 +132,105 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     if len(cover_arrs) < 2:
         raise ValueError("Este esquema requiere al menos 2 imágenes de cobertura.")
 
-    # Binarizar las coberturas para tomar decisiones lógicas (Blanco=Fondo, Negro=Tinta)
-    # Usamos umbral 128 sobre la media RGB
-    c1_bw = np.mean(cover_arrs[0], axis=2) > 128
-    c2_bw = np.mean(cover_arrs[1], axis=2) > 128
+    # 1. Dithering Aleatorio (Random Dithering)
+    # Convertimos las covers a escala de grises (Luminancia)
+    c1_gray = np.array(Image.fromarray(cover_arrs[0]).convert("L"))
+    c2_gray = np.array(Image.fromarray(cover_arrs[1]).convert("L"))
+    
+    # Generamos una matriz de ruido aleatorio (0-255)
+    # Si el píxel de la imagen es más oscuro que el ruido aleatorio -> Tinta (Negro)
+    # Esto dispersa los píxeles negros sin crear bordes sólidos reconocibles en la suma.
+    noise_matrix = rng.integers(0, 256, size=(h, w))
+    
+    # True = Fondo (Blanco), False = Tinta (Negro)
+    c1_bg = c1_gray > noise_matrix
+    c2_bg = c2_gray > noise_matrix
 
     s1 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     s2 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     
-    # Paleta RGBCMY (6 colores) y Negro
+    # Paleta completa S(1) = {R, G, B, C, M, Y}
     palette = np.array([
-        [255, 0, 0], [0, 255, 0], [0, 0, 255],       # R, G, B
-        [0, 255, 255], [255, 0, 255], [255, 255, 0]  # C, M, Y
+        [255, 0, 0], [0, 255, 0], [0, 0, 255],     
+        [0, 255, 255], [255, 0, 255], [255, 255, 0]
     ], dtype=np.uint8)
+    
     black_pixel = np.array([0, 0, 0], dtype=np.uint8)
     
-    # Mapa de complementarios
-    comp_idx = np.array([3, 4, 5, 0, 1, 2])
+    # Mapa de Complementarios: R-C, G-M, B-Y
+    comp_map = np.array([3, 4, 5, 0, 1, 2])
 
-    # Generamos índices aleatorios para todo el array de una vez (optimización)
-    # X e Y son colores aleatorios independientes
-    rand_X = rng.integers(0, 6, size=(h, w))
-    rand_Y = rng.integers(0, 6, size=(h, w))
+    # Pre-cálculo de colores aleatorios base
+    rand_cols = rng.integers(0, 6, size=(h, w, 2))
     
-    # Precalculamos complementarios
-    comp_X = comp_idx[rand_X]
-    comp_Y = comp_idx[rand_Y]
+    # Decisión de permutación de columnas (Shuffle): 0 o 1
+    perms = rng.integers(0, 2, size=(h, w))
 
-    # --- LÓGICA POR PÍXEL (Vectorizada) ---
-    # Subpíxel 1 (Izquierdo): Controlado principalmente por Cobertura 1 y Secreto
-    # Subpíxel 2 (Derecho): Controlado por Cobertura 2 y Cobertura 1
-    
-    # ITERAMOS POR FILAS PARA ASIGNACIÓN (Más claro que vectorización total compleja)
     for r in range(h):
         for c in range(w):
-            # Obtener estados
-            sec_w = secret_mask[r, c] # True si Secreto es Blanco
-            cov1_w = c1_bw[r, c]      # True si Cover 1 es Fondo (Blanco)
-            cov2_w = c2_bw[r, c]      # True si Cover 2 es Fondo (Blanco)
+            sec_white = secret_mask[r, c]
+            c1_white = c1_bg[r, c] 
+            c2_white = c2_bg[r, c] 
             
-            # Colores base para este píxel
-            x_idx = rand_X[r, c]
-            y_idx = rand_Y[r, c]
+            idx_a = rand_cols[r, c, 0]
+            idx_b = rand_cols[r, c, 1]
             
-            # --- ASIGNACIÓN SUBPÍXEL 1 (Indice par) ---
-            # Share 1 siempre recibe color aleatorio X en subpíxel 1
-            # Esto es consistente con la Construcción 2 del paper
-            color_s1_p1 = palette[x_idx]
+            # --- MATRICES BASE (Yang et al.) ---
             
-            # Share 2 depende del secreto
-            if sec_w:
-                # Secreto Blanco: S2 copia a S1
-                color_s2_p1 = palette[x_idx]
-            else:
-                # Secreto Negro: S2 es complementario de S1
-                color_s2_p1 = palette[comp_X[r, c]]
-
-            # --- ASIGNACIÓN SUBPÍXEL 2 (Indice impar) ---
-            
-            # SHARE 1: Depende de SU cobertura (Cov1)
-            if cov1_w:
-                # Si Cov1 es fondo, ponemos color (ruido)
-                color_s1_p2 = palette[y_idx]
-            else:
-                # Si Cov1 es figura (negro), ponemos NEGRO para oscurecer la sombra
-                color_s1_p2 = black_pixel
-
-            # SHARE 2: Depende de SU cobertura (Cov2) y relación con Cov1/Secreto
-            if not cov2_w:
-                # Si Cov2 es figura (negro), debe ser negro
-                color_s2_p2 = black_pixel
-            else:
-                # Si Cov2 es fondo (quiere color):
-                if cov1_w:
-                    # Caso: Ambas coberturas son Blancas
-                    if sec_w:
-                        color_s2_p2 = palette[y_idx] # Igual a S1 (Color)
-                    else:
-                        color_s2_p2 = palette[comp_Y[r, c]] # Comp a S1 (Negro)
+            # CASO 1: Ambas Coberturas son Fondo (Blanco)
+            if c1_white and c2_white:
+                if sec_white:
+                    row1 = [idx_a, idx_b]
+                    row2 = [idx_a, idx_b]
                 else:
-                    # Caso: Cov1 es Negro pero Cov2 es Blanco
-                    # S1 tiene Negro. S2 necesita Color para ver su propia imagen.
-                    # Ponemos un color aleatorio (Y). 
-                    # El contraste se mantendrá porque [Negro] vs [Color] es oscuro.
-                    color_s2_p2 = palette[y_idx]
+                    row1 = [idx_a, idx_b]
+                    row2 = [comp_map[idx_a], comp_map[idx_b]]
 
-            # Asignar a matrices
-            s1[r, c*2]   = color_s1_p1
-            s1[r, c*2+1] = color_s1_p2
+            # CASO 2: C1 Fondo, C2 Tinta (Negro)
+            elif c1_white and not c2_white:
+                if sec_white:
+                    row1 = [idx_a, idx_b]
+                    row2 = [idx_a, -1] # -1 indica Negro
+                else:
+                    row1 = [idx_a, idx_b]
+                    row2 = [comp_map[idx_a], -1]
+
+            # CASO 3: C1 Tinta (Negro), C2 Fondo
+            elif not c1_white and c2_white:
+                if sec_white:
+                    row1 = [idx_a, -1]
+                    row2 = [idx_a, idx_b]
+                else:
+                    row1 = [idx_a, -1]
+                    row2 = [comp_map[idx_a], idx_b] 
+
+            # CASO 4: Ambas Tinta (Negro)
+            else:
+                if sec_white:
+                    row1 = [idx_a, -1]
+                    row2 = [idx_a, -1]
+                else:
+                    row1 = [idx_a, -1]
+                    row2 = [comp_map[idx_a], -1]
+
+            # --- PERMUTACIÓN DE COLUMNAS (SHUFFLE) ---
+            # Intercambiamos la posición izquierda/derecha aleatoriamente.
+            # Esto rompe la coherencia vertical de las formas "fantasmas".
+            if perms[r, c] == 1:
+                row1 = [row1[1], row1[0]]
+                row2 = [row2[1], row2[0]]
+
+            # --- PINTADO ---
+            def get_rgb(code):
+                return black_pixel if code == -1 else palette[code]
+
+            s1[r, c*2]   = get_rgb(row1[0])
+            s1[r, c*2+1] = get_rgb(row1[1])
             
-            s2[r, c*2]   = color_s2_p1
-            s2[r, c*2+1] = color_s2_p2
+            s2[r, c*2]   = get_rgb(row2[0])
+            s2[r, c*2+1] = get_rgb(row2[1])
 
     return [Image.fromarray(s1), Image.fromarray(s2)]
-
 
 # --- MÉTODO 4 (ANTIGUO 1) ---
 def generate_basic_evcs_augmented(secret_mask, cover_arrs, *, seed=None):
