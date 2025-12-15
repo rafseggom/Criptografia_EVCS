@@ -48,7 +48,7 @@ with col_b:
             "Construcción 2 · (2,2) VCS",
             "Construcción 3 · Perfect Black",
             "Construcción 4 · Simple 6-Color",
-            "Construcción 5 · EVCS Coloreado Mejorado", # OPCIÓN NUEVA
+            "Construcción 5 · EVCS Coloreado Mejorado", 
         ),
         index=0, 
     )

@@ -377,91 +377,80 @@ def generate_complementary_multi(secret_mask, cover_arrs, *, seed=None):
 
 def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
     """
-    Construcción 4: Simple 6-Color según Yang et al. (2015)
+    Construcción 4: Simple 6-Color (Corregida según Naor-Shamir 2-out-of-2).
     
-    Esquema puro con 6 colores primarios aleatorios.
+    Implementación rigurosa del esquema (2,2) visual:
+    - n=2 participantes.
+    - m=2 expansión de píxel (horizontal).
     
-    Usa los 6 colores primarios del modelo RGB + CMY:
-    - Colores: Red, Green, Blue, Cyan, Magenta, Yellow
-    - Complementarios: R↔C, G↔M, B↔Y
-    
-    Principio CORRECTO:
-    - Píxel NEGRO del SECRETO: Complementarios en MISMAS posiciones
-      → S1[pos0]=R y S2[pos0]=C → R×C = Negro
-      → S1[pos1]=G y S2[pos1]=M → G×M = Negro
-      → Resultado: TODO NEGRO
-      
-    - Píxel BLANCO del SECRETO: NO complementarios en MISMAS posiciones
-      → S1[pos0]=R y S2[pos0]=G → R×G = Color oscuro pero NO negro
-      → Resultado: COLORES (no negro)
+    Matemática del Esquema (Fuente: Naor & Shamir, 1994):
+    1.  La Sombra 1 (S1) siempre es ruido aleatorio uniforme.
+    2.  Si el secreto es BLANCO (0): S2 es IDÉNTICA a S1. 
+        -> Superposición: Color X * Color X = Color X (Transparente/Visible).
+    3.  Si el secreto es NEGRO (1): S2 es el COMPLEMENTARIO de S1.
+        -> Superposición: Color X * Color Comp(X) = Negro (Bloqueo total de luz).
+        
+    Colores usados (RGB sustractivo simulado):
+    - Base: Rojo, Verde, Azul.
+    - Complementos: Cian, Magenta, Amarillo.
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
-    n = len(cover_arrs)
     
-    if n != 2:
-        raise ValueError("Simple 6-Color requiere exactamente 2 participantes")
+    # Validación estricta de participantes
+    if len(cover_arrs) != 2:
+        # Nota: Aunque el algoritmo solo usa el secreto, recibimos cover_arrs
+        # para mantener la firma de la función compatible con el resto de tu app.
+        raise ValueError("Simple 6-Color requiere exactamente 2 participantes (imágenes de cobertura).")
     
+    # Pre-reservar memoria para las sombras
     shares = [np.zeros((h, w * 2, 3), dtype=np.uint8) for _ in range(2)]
     
-    # 6 colores primarios RGB + CMY (valores puros para máximo contraste)
-    colors = {
-        0: np.array([255, 0, 0], dtype=np.uint8),      # Red
-        1: np.array([0, 255, 0], dtype=np.uint8),      # Green
-        2: np.array([0, 0, 255], dtype=np.uint8),      # Blue
-        3: np.array([0, 255, 255], dtype=np.uint8),    # Cyan
-        4: np.array([255, 0, 255], dtype=np.uint8),    # Magenta
-        5: np.array([255, 255, 0], dtype=np.uint8),    # Yellow
-    }
+    # Tabla de colores (RGB)
+    # Usamos listas para acceso rápido por índice
+    palette = [
+        [255, 0, 0],   # 0: Rojo
+        [0, 255, 0],   # 1: Verde
+        [0, 0, 255],   # 2: Azul
+        [0, 255, 255], # 3: Cian    (Comp Rojo)
+        [255, 0, 255], # 4: Magenta (Comp Verde)
+        [255, 255, 0]  # 5: Amarillo (Comp Azul)
+    ]
     
-    # Pares complementarios: R↔C(0↔3), G↔M(1↔4), B↔Y(2↔5)
-    complementary = {0: 3, 3: 0, 1: 4, 4: 1, 2: 5, 5: 2}
+    # Mapa de complementarios: índice -> índice complementario
+    # 0(R)<->3(C), 1(G)<->4(M), 2(B)<->5(Y)
+    comp_map = {0: 3, 1: 4, 2: 5, 3: 0, 4: 1, 5: 2}
+    
+    # Optimizamos convirtiendo la paleta a numpy array para asignación rápida
+    palette_arr = np.array(palette, dtype=np.uint8)
 
     for r in range(h):
         for c in range(w):
+            # 1. Generar patrón aleatorio para Sombra 1 (S1)
+            # Elegimos 2 colores aleatorios para los 2 subpíxeles
+            idx_1a = rng.integers(0, 6)
+            idx_1b = rng.integers(0, 6)
             
-            if secret_mask[r, c]:  # BLANCO del SECRETO (fondo)
-                # Elegir 2 colores aleatorios para cada posición del píxel expandido
-                # IMPORTANTE: NO deben ser complementarios entre sombras en la MISMA posición
-                
-                # Posición 0 del píxel expandido
-                c1_pos0 = rng.integers(0, 6)
-                c2_pos0 = rng.integers(0, 6)
-                # Asegurar que NO sean complementarios
-                while c2_pos0 == complementary[c1_pos0]:
-                    c2_pos0 = rng.integers(0, 6)
-                
-                # Posición 1 del píxel expandido
-                c1_pos1 = rng.integers(0, 6)
-                c2_pos1 = rng.integers(0, 6)
-                # Asegurar que NO sean complementarios
-                while c2_pos1 == complementary[c1_pos1]:
-                    c2_pos1 = rng.integers(0, 6)
-                
-                shares[0][r, c*2] = colors[c1_pos0]
-                shares[0][r, c*2+1] = colors[c1_pos1]
-                
-                shares[1][r, c*2] = colors[c2_pos0]
-                shares[1][r, c*2+1] = colors[c2_pos1]
+            # Asignar colores a Sombra 1
+            shares[0][r, c*2]     = palette_arr[idx_1a]
+            shares[0][r, c*2 + 1] = palette_arr[idx_1b]
             
-            else:  # NEGRO del SECRETO
-                # Elegir colores complementarios para CADA posición
-                # S1 y S2 deben tener complementarios en las MISMAS posiciones
+            # 2. Determinar Sombra 2 (S2) basándonos en el secreto
+            if secret_mask[r, c]:  # Píxel BLANCO (Fondo / Transparente)
+                # Según Naor-Shamir: Las matrices deben ser iguales para recuperar el blanco.
+                # S2 = S1
+                idx_2a = idx_1a
+                idx_2b = idx_1b
                 
-                # Posición 0: elegir un color base y su complementario
-                base0 = rng.integers(0, 6)
-                comp0 = complementary[base0]
-                
-                # Posición 1: elegir otro par (puede ser el mismo o diferente)
-                base1 = rng.integers(0, 6)
-                comp1 = complementary[base1]
-                
-                # S1 tiene los colores base, S2 tiene los complementarios
-                shares[0][r, c*2] = colors[base0]
-                shares[0][r, c*2+1] = colors[base1]
-                
-                shares[1][r, c*2] = colors[comp0]
-                shares[1][r, c*2+1] = colors[comp1]
+            else:  # Píxel NEGRO (Tinta / Opaco)
+                # Según Naor-Shamir: Las matrices deben ser complementarias.
+                # S2 = Complemento(S1)
+                idx_2a = comp_map[idx_1a]
+                idx_2b = comp_map[idx_1b]
+            
+            # Asignar colores calculados a Sombra 2
+            shares[1][r, c*2]     = palette_arr[idx_2a]
+            shares[1][r, c*2 + 1] = palette_arr[idx_2b]
 
     return [Image.fromarray(s) for s in shares]
 
