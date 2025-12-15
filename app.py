@@ -2,7 +2,6 @@
 import components
 import logic
 
-
 st.set_page_config(
     page_title="EVCSdemo",
     layout="wide",
@@ -15,18 +14,14 @@ st.markdown(
     <style>
       :root {color-scheme: light;}
       body {background: #f6f7fb;}
-      #MainMenu {display: none;}
-      header {visibility: hidden;}
-      footer {visibility: hidden;}
-      .block-container {padding-top: 1rem; padding-bottom: 2.5rem;}
-      .stButton > button {background: #111827; color: white; border-radius: 10px; padding: 0.65rem 1.1rem; border: none;}
+      .stButton > button {background: #111827; color: white; border-radius: 10px; border: none;}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("🔐 EVCSdemo · Criptografía Visual Extendida")
-st.caption("Demo pedagógica para mostrar el funcionamiento de EVCS con diferentes construcciones.")
+st.title("🔐 EVCSdemo · Criptografía Visual")
+st.caption("Implementación de esquemas de secreto visual.")
 
 if "generated" not in st.session_state:
     st.session_state.generated = False
@@ -40,300 +35,210 @@ with col_a:
     dither = st.checkbox("Dithering suave (recomendado)", value=True)
 
 with col_b:
-    st.subheader("Construcción")
-    algo = st.radio(
-        "Elige esquema",
-        (
-            "Construcción 1 · Básico RGB",
-            "Construcción 2 · (2,2) VCS",
-            "Construcción 3 · Perfect Black",
-            "Construcción 4 · Simple 6-Color",
-            "Construcción 5 · EVCS Coloreado Mejorado", 
-        ),
-        index=0, 
-    )
-    size = st.slider("Tamaño base (px)", 320, 900, 640, step=40)
+    st.subheader("Algoritmo")
     
-    if "Básico" in algo:
-        st.caption("m=2, esquema estándar.")
-    elif "(2,2)" in algo:
-        st.caption("m=2, esquema umbral k=2.")
-    elif "Simple" in algo:
-        st.caption("m=2, colores aleatorios, gran contraste de secreto.")
-    elif "EVCS" in algo:
-        st.caption("m=2, Anti-Ghosting, revela covers y secreto.")
-    else:
-        st.caption("m=4 (2x2), negro sólido perfecto.")
+    # Dividimos columna en dos: Selectores (izq) y Explicación (der)
+    c_algo_sel, c_algo_info = st.columns([0.6, 0.4], gap="medium")
+    
+    with c_algo_sel:
+        algo_selection = st.radio(
+            "Elige la construcción:",
+            (
+                "Construcción 1 · VCS - Black and White",
+                "Construcción 2 · Color Black White - VCS (CBW)",
+                "Construcción 3 · CBW-EVCS (Esquema extendido)",
+                "Construcción 4 · CBW-EVCS aumentado",
+                "Construcción 5 · CBW-EVCS Aumentado Perfect Black",
+            ),
+            index=1,
+            label_visibility="collapsed"
+        )
+        
+        st.write("") # Espaciador visual
+        size = st.slider("Tamaño (px)", 320, 900, 640, step=40)
 
+    # Textos actualizados y limpios, coherentes con los nuevos nombres
+    info_texts = {
+        "Construcción 1": """
+        <b>En Desarrollo</b><br><br>
+        Implementación clásica para blanco y negro puro ideada por Naor y Shamir. 
+        """,
+        
+        "Construcción 2": """
+        <b>CBW Puro (Ruido)</b><br><br>
+        Esta versión prioriza el contraste absoluto del secreto. 
+        Ignora las imágenes de los participantes, generando sombras de 
+        ruido aleatorio (pixelado) que al unirse recuperan el mensaje con máxima nitidez.
+        """,
+        
+        "Construcción 3": """
+        <b>CBW Extendido</b><br><br>
+        Variante del CBW que permite ocultar imágenes dentro de las sombras.
+        Utiliza un algoritmo de "preferencia suave" para reducir el rastro (fantasma) 
+        que deja una imagen sobre la otra, manteniendo el secreto legible haciendo uso de imágenes cobertura.
+        """,
+        
+        "Construcción 4": """
+        <b>CBW Aumentado</b><br><br>
+        Evolución del esquema estándar. En lugar de usar blanco para el contraste, 
+        aplica una rotación de canales de color en el píxel negro.
+        Esto "aumenta" la oscuridad resultante al forzar la mezcla de colores opuestos.
+        """,
+        
+        "Construcción 5": """
+        <b>Perfect Black</b><br><br>
+        <b>En Desarrollo</b><br>
+        Versión avanzada con matrices 2x2. Busca lograr una opacidad 
+        del 100% (negro sólido) en la recuperación, eliminando cualquier semitransparencia.
+        """
+    }
+
+    # Selección dinámica del texto
+    current_key = next((k for k in info_texts if k in algo_selection), "Construcción 2")
+    description = info_texts[current_key]
+
+    # Renderizado del cuadro de información
+    with c_algo_info:
+        st.markdown(
+            f"""
+            <div style="
+                background-color: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                padding: 15px;
+                font-size: 13px;
+                color: #475569;
+                line-height: 1.6;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            ">
+                {description}
+       
+            """,
+            unsafe_allow_html=True
+        )
+        
 st.markdown("---")
 
-# Sección de imágenes de cobertura personalizadas
-st.subheader("📸 Imágenes de cobertura (una por participante)")
-st.caption("Sube una imagen de cobertura para cada participante. El número de imágenes determina el número de participantes.")
-
-# Usar columnas para mostrar los uploader de forma horizontal
+st.subheader("📸 Imágenes de cobertura")
+# Lógica dinámica de covers (hasta 5)
 cover_files = [None] * 5 
-max_participants = 5
-cols = st.columns(max_participants)
-
-for i in range(max_participants):
+cols = st.columns(5)
+for i in range(5):
     with cols[i]:
-        cover_file = st.file_uploader(
-            f"Persona {i+1}",
-            type=["png", "jpg", "jpeg"],
-            key=f"cover_person_{i}"
-        )
-        if cover_file is not None:
-            cover_files[i] = cover_file
-
-# Filtrar solo los archivos cargados (mantener el orden)
+        cf = st.file_uploader(f"P{i+1}", type=["png","jpg"], key=f"c_{i}")
+        if cf: cover_files[i] = cf
 cover_files = [f for f in cover_files if f is not None]
-
-# Determinar número de participantes según archivos subidos
 n_participants = len(cover_files)
 
 st.markdown("---")
 
-def _generate_2():
-    if not secret_file or n_participants != 2:
-        st.warning("Carga el secreto y exactamente 2 imágenes de cobertura para continuar.")
-        return
-    with st.spinner("Aplicando EVCS y expansión de píxel..."):
-        secret_preview, cover_img1, mask, cover_arr1 = logic.prepare_inputs(
-            secret_file, cover_files[0], invert=invert_secret, size=size, dither=dither
-        )
-        _, cover_img2, _, cover_arr2 = logic.prepare_inputs(
-            secret_file, cover_files[1], invert=invert_secret, size=size, dither=dither
-        )
-        
-        if "Básico" in algo:
-            s1, s2 = logic.generate_basic(mask, cover_arr1)
-            s1_p2, s2_p2 = logic.generate_basic(mask, cover_arr2)
-        elif "Complementarios" in algo:
-            s1, s2 = logic.generate_complementary(mask, cover_arr1)
-            s1_p2, s2_p2 = logic.generate_complementary(mask, cover_arr2)
-        else:
-            s1, s2 = logic.generate_perfect_black(mask, cover_arr1)
-            s1_p2, s2_p2 = logic.generate_perfect_black(mask, cover_arr2)
-        
-        merged = logic.overlay(s1, s2)
-    
-    st.session_state.update(
-        {
-            "secret_prev": secret_preview,
-            "cover_prev": [cover_img1, cover_img2],
-            "s1": s1,
-            "s2": s2,
-            "merged": merged,
-            "generated": True,
-        }
-    )
-
-
 def _generate_multi():
-    if not secret_file or n_participants < 2:
-        st.warning(f"Carga el secreto y al menos 2 imágenes de cobertura para continuar.")
+    if not secret_file:
+        st.warning("Falta el archivo secreto.")
         return
-    
-    if "Perfect Black" in algo and n_participants != 2:
-        st.warning("Perfect Black está disponible solo para 2 participantes en esta demo.")
+    if n_participants < 2:
+        st.warning("Se requieren al menos 2 imágenes de cobertura (participantes).")
         return
+
+    # Validaciones específicas de métodos
+    if "Construcción 2" in algo_selection and n_participants != 2:
+         st.error("La Construcción 2 (CBW) es estricta para n=2.")
+         return
     
-    if "Simple" in algo and n_participants != 2:
-        st.warning("Simple 6-Color está disponible solo para 2 participantes.")
-        return
-    
-    with st.spinner("Procesando criptografía visual..."):
+    with st.spinner("Procesando criptografía..."):
+        # Preprocesar secreto y covers
         secret_preview, _, mask, _ = logic.prepare_inputs(
             secret_file, cover_files[0], invert=invert_secret, size=size, dither=dither
         )
         cover_arrs = [
-            logic.prepare_inputs(secret_file, cover_file, invert=invert_secret, size=size, dither=dither)[3]
-            for cover_file in cover_files
+            logic.prepare_inputs(secret_file, f, invert=invert_secret, size=size, dither=dither)[3]
+            for f in cover_files
         ]
         
-        if "Básico" in algo:
-            shares = logic.generate_basic_multi(mask, cover_arrs)
-        elif "(2,2)" in algo:
-            shares = logic.generate_2_2_vcs_multi(mask, cover_arrs)
-        elif "Simple" in algo:
+        # --- SELECTOR DE LÓGICA ---
+        shares = []
+        
+        if "Construcción 1" in algo_selection:
+            st.warning("⚠️ Método en construcción (Placeholder).")
+            shares = logic.generate_bw_vcs_placeholder(mask, cover_arrs)
+            
+        elif "Construcción 2" in algo_selection:
+            # ANTIGUO MÉTODO 4 (Corregido Naor-Shamir)
             shares = logic.generate_simple_6color(mask, cover_arrs)
-        elif "EVCS" in algo: 
-            # Construcción 5: usar las 2 primeras covers
-            current_covers = cover_arrs[:2]
-            shares = logic.generate_evcs_colored(mask, current_covers)
-        else:
-            s1, s2 = logic.generate_perfect_black(mask, cover_arrs[0])
-            shares = [s1, s2]
+            
+        elif "Construcción 3" in algo_selection:
+            # ANTIGUO MÉTODO 5 (Extendida)
+            shares = logic.generate_evcs_colored(mask, cover_arrs)
+            
+        elif "Construcción 4" in algo_selection:
+            # ANTIGUO MÉTODO 1 (Básico RGB)
+            shares = logic.generate_basic_evcs_augmented(mask, cover_arrs)
+            
+        elif "Construcción 5" in algo_selection:
+            st.warning("⚠️ Método en construcción (Placeholder).")
+            shares = logic.generate_perfect_black_placeholder(mask, cover_arrs)
     
     st.session_state.update({
-        "secret_prev_multi": secret_preview,
-        "shares_multi": shares,
-        "generated_multi": True,
-        "n_part": n_participants,
+        "secret_prev": secret_preview,
+        "shares": shares,
+        "generated": True
     })
 
+run_btn = st.button("🚀 Generar Sombras", type="primary", use_container_width=True)
 
-# Mostrar botones según número de participantes
-if n_participants == 2:
-    run2 = st.button("🚀 Generar sombras (2 participantes)", width='stretch', type="primary")
-    if run2:
-        _generate_multi()
+if run_btn:
+    _generate_multi()
 
-    if st.session_state.get("generated_multi"):
-        with st.expander("ℹ️ Cómo funciona el esquema elegido", expanded=False):
-            if "Básico" in algo:
-                st.markdown("""
-                **Construcción 1: Básico RGB (m=2)**
-                
-                Para cada píxel del secreto:
-                - **Píxel NEGRO**: Ambas sombras generan el mismo patrón [Color | Blanco]
-                  - Al superponer: Color × Blanco = **Negro** ✓
-                - **Píxel BLANCO**: Las sombras generan patrones complementarios
-                  - Sombra 1: [Color | Blanco] | Sombra 2: [Blanco | Color]
-                  - Al superponer: Todos los píxeles se cancelan = **Blanco** ✓
-                
-                Cada participante usa su propia imagen de cobertura, garantizando privacidad.
-                """)
-            elif "(2,2)" in algo:
-                st.markdown("""
-                **Construcción 2: (2,2) VCS de Yang et al. (2015)**
-                
-                Esquema umbral donde n=2 participantes y k=2 (ambos necesarios):
-                - **Píxel NEGRO**: Ambas sombras comparten el MISMO patrón
-                  - [Color | Blanco] en ambas sombras
-                  - Superposición: **Negro visible** ✓
-                - **Píxel BLANCO**: Patrones COMPLEMENTARIOS que se anulan
-                  - Sombra 1: [Color | Blanco] | Sombra 2: [Blanco | Color]
-                  - Superposición: **Blanco** ✓
-                
-                Expansión de píxel m=2 horizontal. Sin una sombra no se revela nada.
-                """)
-            elif "Simple" in algo:
-                st.markdown("""
-                **Construcción 4: Simple 6-Color (Yang et al. 2015)**
-                
-                Esquema básico con 6 colores primarios {R, G, B, C, M, Y}:
-                - **Píxel NEGRO (secreto)**: Colores complementarios coincidentes
-                  - Ejemplo: [Rojo | Cian] × [Rojo | Cian] = **Negro puro** ✓
-                  - Los complementarios se anulan: R×C = 0, G×M = 0, B×Y = 0
-                - **Píxel BLANCO (fondo)**: Colores aleatorios NO coincidentes
-                  - Ejemplo: [Rojo | Verde] × [Azul | Magenta] = **Colores** ✓
-                  - No hay superposición de complementarios → fondo colorido
-                
-                m=2 horizontal, aleatorización total, máximo contraste visual.
-                """)
-            elif "EVCS" in algo:
-                st.markdown("""
-                **Construcción 5: EVCS Coloreado (Propuesta del Grupo)**
-                
-                Mejora heurística sobre la construcción 4 para ocultar imágenes en las sombras.
-                
-                - **Gestión de Conflicto (Anti-Ghosting)**: 
-                  Cuando el secreto exige un par complementario (Negro) pero ambas imágenes de cobertura quieren el mismo tipo de color (ej. ambas son texto negro), el algoritmo no favorece siempre a la Sombra 1.
-                  Aleatoriza quién "gana" el píxel correcto. Esto convierte el "fantasma" de la otra imagen en ruido aleatorio difuso.
-                
-                - **Paleta de Colores**:
-                  - Oscuros (R,G,B) para representar tinta negra.
-                  - Claros (C,M,Y) para representar fondo blanco.
-                """)
-            else:
-                st.markdown("""
-                **Construcción 3: Perfect Black (m=4)**
-                
-                Expansión 2×2 con negro absoluto:
-                - **Píxel NEGRO**: Colores complementarios en posiciones coincidentes
-                  - Color × (255-Color) = **Negro puro 100%** ✓
-                - **Píxel BLANCO**: Patrones diagonales que se cancelan
-                  - Resultado: **Blanco puro** ✓
-                
-                Contraste máximo: negro sólido sin rayas, revelado perfecto.
-                """)
-
-        st.subheader("Resultado")
-        col_secret, col_shares = st.columns([1, 3])
-        
-        with col_secret:
-            st.markdown("**Secreto:**")
-            st.image(st.session_state["secret_prev_multi"], width=300)
-        
-        with col_shares:
-            st.markdown("**Sombras:**")
-            shares = st.session_state["shares_multi"]
-            n_cols = min(4, len(shares))
+if st.session_state.get("generated"):
+    
+    # --- EXPLICACIONES PEDAGÓGICAS ACTUALIZADAS ---
+    with st.expander("ℹ️ Detalle Matemático del Algoritmo", expanded=True):
+        if "Construcción 1" in algo_selection:
+            st.info("Algoritmo pendiente de implementación.")
             
-            for row_start in range(0, len(shares), n_cols):
-                row_end = min(row_start + n_cols, len(shares))
-                cols = st.columns(row_end - row_start)
-                for idx, col in enumerate(cols):
-                    share_idx = row_start + idx
-                    with col:
-                        st.image(shares[share_idx], caption=f"P{share_idx+1}")
-
-        st.markdown("---")
-        st.subheader("Recuperación del secreto")
-        st.caption("Arrastra y alinea las sombras para revelar el secreto.")
-        b_list = [components.image_to_base64(img) for img in st.session_state["shares_multi"]]
-        components.render_multi_drag_demo(b_list, height=820)
-
-elif n_participants > 2:
-    run_multi = st.button("🚀 Generar sombras (n participantes)", width='stretch', type="secondary")
-    if run_multi:
-        _generate_multi()
-
-    if st.session_state.get("generated_multi"):
-        with st.expander("ℹ️ Cómo funciona el esquema elegido", expanded=False):
-            if "Básico" in algo:
-                st.markdown("""
-                **Construcción 1: Básico RGB (m=2, n participantes)**
-                
-                Extensión de Yang et al. (2015) para n participantes:
-                - **Píxel NEGRO**: TODAS las sombras generan el mismo patrón
-                  - Al multiplicar n sombras: Color^n = **Negro** ✓
-                - **Píxel BLANCO**: Cada sombra genera un patrón diferente (índice par/impar)
-                  - Patrones complementarios se cancelan al multiplicar todas = **Blanco** ✓
-                
-                Cada participante i recibe una sombra única generada con su imagen de cobertura.
-                Solo al superponer TODAS se recupera el secreto.
-                """)
-            elif "(2,2)" in algo:
-                st.markdown("""
-                **Construcción 2: (2,2) VCS Multi-participante**
-                
-                Extensión para n>2 participantes con umbral k=2:
-                - **Píxel NEGRO**: Todas comparten el mismo patrón base
-                  - Multiplicación conjunta = **Negro visible** ✓
-                - **Píxel BLANCO**: Patrones alternados por índice
-                  - Par/impar se cancelan mutuamente = **Blanco** ✓
-                
-                Principio: sin al menos k sombras, el secreto permanece oculto.
-                """)
-
-        st.subheader("Resultado")
-        col_secret, col_shares = st.columns([1, 3])
-        
-        with col_secret:
-            st.markdown("**Secreto:**")
-            st.image(st.session_state["secret_prev_multi"], width=300)
-        
-        with col_shares:
-            st.markdown("**Sombras:**")
-            shares = st.session_state["shares_multi"]
-            n_cols = min(4, len(shares))
+        elif "Construcción 2" in algo_selection:
+            st.markdown("""
+            **Construcción 2: Color Black White - VCS (CBW)**
             
-            for row_start in range(0, len(shares), n_cols):
-                row_end = min(row_start + n_cols, len(shares))
-                cols = st.columns(row_end - row_start)
-                for idx, col in enumerate(cols):
-                    share_idx = row_start + idx
-                    with col:
-                        st.image(shares[share_idx], caption=f"P{share_idx+1}")
+            Implementación pura del esquema (2,2) de Naor & Shamir adaptado a color.
+            * **Objetivo:** Máximo contraste del secreto, ignorando el contenido de las covers (ruido).
+            * **Lógica:**
+                * **Secreto Blanco:** $S_1 = S_2$. Al superponer, $C \times C = C$ (Transparente/Visible).
+                * **Secreto Negro:** $S_1 = \overline{S_2}$ (Complementario). Al superponer, $C \times \overline{C} = Negro$.
+            """)
+            
+        elif "Construcción 3" in algo_selection:
+            st.markdown("""
+            **Construcción 3: CBW-EVCS (Esquema extendido)**
+            
+            Variante del esquema anterior que intenta preservar las imágenes de los participantes.
+            * **Anti-Ghosting:** Cuando hay conflicto de intereses (ambos participantes quieren negro en un píxel donde el secreto exige negro), se aleatoriza la asignación.
+            * **Paleta:** Usa subconjuntos de colores Claros/Oscuros para simular niveles de gris.
+            """)
+            
+        elif "Construcción 4" in algo_selection:
+            st.markdown("""
+            **Construcción 4: CBW-EVCS Aumentado**
+            
+            Esquema clásico RGB con expansión m=2.
+            * **Secreto Negro:** Usa el concepto de "Clash" (choque de color). Si la cover es Roja, la sombra usa Verde/Azul para forzar oscuridad.
+            * **Secreto Blanco:** Alternancia de paridad para cancelar el color y dejar pasar luz.
+            """)
 
-        st.markdown("---")
-        st.subheader("Recuperación del secreto")
-        st.caption("Arrastra y alinea las sombras para revelar el secreto.")
-        b_list = [components.image_to_base64(img) for img in st.session_state["shares_multi"]]
-        components.render_multi_drag_demo(b_list, height=820)
+    # --- RESULTADOS ---
+    col_secret, col_shares = st.columns([1, 3])
+    with col_secret:
+        st.markdown("**Secreto original:**")
+        st.image(st.session_state["secret_prev"], width=300)
+    
+    with col_shares:
+        st.markdown("**Sombras generadas:**")
+        cols = st.columns(len(st.session_state["shares"]))
+        for idx, (c, share) in enumerate(zip(cols, st.session_state["shares"])):
+            with c:
+                st.image(share, caption=f"Participante {idx+1}", width=300)
 
-else:
-    st.info("👆 Sube imágenes de cobertura en los campos de arriba. El número de imágenes determina el número de participantes.")
+    st.markdown("---")
+    st.subheader("Zona de Pruebas (Drag & Drop)")
+    b_list = [components.image_to_base64(img) for img in st.session_state["shares"]]
+    components.render_multi_drag_demo(b_list)
