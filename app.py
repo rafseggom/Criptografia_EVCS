@@ -50,7 +50,7 @@ with col_b:
                 "Construcción 4 · CBW-EVCS aumentado",
                 "Construcción 5 · CBW-EVCS Aumentado Perfect Black",
             ),
-            index=1,
+            index=0,
             label_visibility="collapsed"
         )
         
@@ -60,8 +60,10 @@ with col_b:
     # Textos actualizados y limpios, coherentes con los nuevos nombres
     info_texts = {
         "Construcción 1": """
-        <b>En Desarrollo</b><br><br>
-        Implementación clásica para blanco y negro puro ideada por Naor y Shamir. 
+        <b>Clásico Naor-Shamir (B/N)</b><br><br>
+        El algoritmo original de 1994. Utiliza matrices de píxeles blanco y negro puro. 
+        Garantiza seguridad perfecta: cada sombra individual es ruido aleatorio con 
+        densidad 50% de negro, matemáticamente indistinguible de la otra.
         """,
         
         "Construcción 2": """
@@ -159,8 +161,7 @@ def _generate_multi():
         shares = []
         
         if "Construcción 1" in algo_selection:
-            st.warning("⚠️ Método en construcción (Placeholder).")
-            shares = logic.generate_bw_vcs_placeholder(mask, cover_arrs)
+            shares = logic.generate_bw_vcs(mask, cover_arrs)
             
         elif "Construcción 2" in algo_selection:
             # ANTIGUO MÉTODO 4 (Corregido Naor-Shamir)
@@ -194,7 +195,15 @@ if st.session_state.get("generated"):
     # --- EXPLICACIONES PEDAGÓGICAS ACTUALIZADAS ---
     with st.expander("ℹ️ Detalle Matemático del Algoritmo", expanded=True):
         if "Construcción 1" in algo_selection:
-            st.info("Algoritmo pendiente de implementación.")
+            st.markdown("""
+            **Construcción 1: VCS Clásico (B/N)**
+            
+            Esquema (2,2) determinista con píxeles puros.
+            * **Expansión:** Cada píxel del secreto se convierte en 2 subpíxeles $[p_1, p_2]$.
+            * **Seguridad:** Cada sombra tiene siempre 1 negro y 1 blanco ($p_1 \ neq p_2$), pareciendo gris uniforme.
+            * **Recuperación:** * Blanco: $[0,1] + [0,1] \to [0,1]$ (50% luz).
+                * Negro: $[0,1] + [1,0] \to [0,0]$ (0% luz, negro total).
+            """)
             
         elif "Construcción 2" in algo_selection:
             st.markdown("""

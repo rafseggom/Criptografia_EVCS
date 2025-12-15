@@ -27,13 +27,61 @@ def overlay(share1, share2):
     return ImageChops.multiply(share1.convert("RGB"), share2.convert("RGB"))
 
 
-# --- MÉTODO 1 (PLACEHOLDER) ---
-def generate_bw_vcs_placeholder(secret_mask, cover_arrs):
-    """ Placeholder para VCS B/N """
+# --- MÉTODO 1 ---
+def generate_bw_vcs(secret_mask, cover_arrs, *, seed=None):
+    """
+    Construcción 1: VCS - Black and White.
+    [cite_start]Implementación clásica de Naor & Shamir (2,2) monocromática[cite: 7].
+    
+    Lógica:
+    - Expansión de píxel m=2 (1x2).
+    - S1 siempre es un patrón aleatorio equilibrado (1 negro, 1 blanco).
+    - Si secreto es BLANCO: S2 es IDÉNTICA a S1.
+    - Si secreto es NEGRO: S2 es COMPLEMENTARIA a S1.
+    """
+    rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
-    # Retorna negro temporalmente
-    dummy = Image.new("RGB", (w*2, h), (200, 200, 200))
-    return [dummy, dummy]
+    
+    if len(cover_arrs) != 2:
+        raise ValueError("VCS B/N requiere exactamente 2 participantes.")
+
+    # 1. Generar la matriz base para Sombra 1 (S1)
+    # Generamos aleatoriamente el primer subpíxel (Izquierdo)
+    # 0 = Negro, 1 = Blanco
+    s1_left = rng.integers(0, 2, size=(h, w), dtype=np.bool_)
+    
+    # El subpíxel derecho siempre es el opuesto del izquierdo para mantener densidad 50%
+    s1_right = ~s1_left 
+    
+    # 2. Calcular Sombra 2 (S2) basada en el Secreto
+    s2_left = np.zeros((h, w), dtype=np.bool_)
+    s2_right = np.zeros((h, w), dtype=np.bool_)
+    
+    # CASO A: Secreto Blanco (True) -> S2 igual a S1
+    s2_left[secret_mask]  = s1_left[secret_mask]
+    s2_right[secret_mask] = s1_right[secret_mask]
+    
+    # CASO B: Secreto Negro (False) -> S2 inversa a S1
+    s2_left[~secret_mask]  = ~s1_left[~secret_mask]
+    s2_right[~secret_mask] = ~s1_right[~secret_mask]
+
+    # 3. Construir las imágenes finales expandidas (Interleaving)
+    # Dimensiones finales: (h, w*2)
+    share1_img = np.zeros((h, w * 2), dtype=np.uint8)
+    share2_img = np.zeros((h, w * 2), dtype=np.uint8)
+    
+    # Asignamos valores: False(0) -> 0 (Negro), True(1) -> 255 (Blanco)
+    # Sombra 1
+    share1_img[:, 0::2] = s1_left.astype(np.uint8) * 255
+    share1_img[:, 1::2] = s1_right.astype(np.uint8) * 255
+    
+    # Sombra 2
+    share2_img[:, 0::2] = s2_left.astype(np.uint8) * 255
+    share2_img[:, 1::2] = s2_right.astype(np.uint8) * 255
+    
+    # Retornamos en RGB para compatibilidad con el resto de la app
+    return [Image.fromarray(share1_img).convert("RGB"), 
+            Image.fromarray(share2_img).convert("RGB")]
 
 
 # --- MÉTODO 2 (ANTIGUO 4) - CORREGIDO (Naor-Shamir) ---
