@@ -118,17 +118,18 @@ def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
 # --- MÉTODO 3 (EVCS REAL) ---
 def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     """
-    Construcción 3: CBW-EVCS (Esquema Extendido) - Estrategia 50% Darkening.
+    Construcción 3: CBW-EVCS (Esquema Extendido) - Factor 30% Luz (70% Oscuridad).
     
-    Basado en la conclusión visual del paper (Fig. 5):
-    El fondo no debe tener "huecos blancos". Debe tener una densidad de negro
-    homogénea del 50% para camuflar la tinta de las letras.
+    Ajuste de Usuario (Fine-Tuning):
+    El usuario detectó que con el 50%, a alta resolución, el ojo humano sigue
+    percibiendo patrones de densidad (ghosting).
     
-    Lógica:
-    1. Comprimimos el rango dinámico de las covers al 50% (Oscurecimiento).
-    2. El blanco puro se convierte en gris medio.
-    3. El dithering convierte ese gris en ruido de puntos negros dispersos.
-    4. Resultado: El fantasma desaparece en el ruido de fondo.
+    Corrección:
+    Bajamos la luminosidad del fondo al 30% (Factor 0.3).
+    Esto implica una densidad de tinta simulada del 70%.
+    Al saturar el fondo de ruido oscuro, la diferencia visual entre las zonas
+    con texto (tinta sólida) y el fondo (tinta aleatoria) se vuelve indetectable
+    para el ojo humano, incluso en monitores RGB brillantes.
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
@@ -140,28 +141,26 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     c1_gray = np.array(Image.fromarray(cover_arrs[0]).convert("L"))
     c2_gray = np.array(Image.fromarray(cover_arrs[1]).convert("L"))
     
-    # [cite_start]2. OSCURECIMIENTO FORZADO (FACTOR 0.5) [cite: 3115, 3150]
-    # El paper indica una transmisión de luz (lambda) del 50%.
-    # Multiplicamos por 0.5 para que el blanco (255) baje a 127.
-    # Esto asegura que el fondo tenga tanto "ruido negro" como las zonas de texto.
-    DARKEN_FACTOR = 0.5
+    # 2. OSCURECIMIENTO AL 70% (Factor de Luz 0.3)
+    # Matemáticamente: Pixel * 0.3.
+    # El blanco (255) pasa a ser ~76 (Gris muy oscuro).
+    # Esto inunda el fondo de píxeles negros tras el dithering, ocultando el secreto.
+    DARKEN_FACTOR = 0.3
     c1_dark = c1_gray * DARKEN_FACTOR
     c2_dark = c2_gray * DARKEN_FACTOR
     
-    # 3. Dithering Probabilístico (Ruido contra Ruido)
-    # Generamos una matriz de umbral aleatorio 0-255
+    # 3. Dithering Probabilístico
     noise_matrix = rng.integers(0, 256, size=(h, w))
     
-    # Decisión: ¿Es Fondo o Tinta?
-    # Como hemos oscurecido la imagen, incluso las zonas "blancas" tendrán
-    # un 50% de probabilidad de ser clasificadas como TINTA (Negro).
-    c1_bg = c1_dark > noise_matrix # True=Fondo, False=Tinta
+    # Al ser la imagen tan oscura, la mayoría de veces (c_dark < noise),
+    # el resultado será False (Negro). El fondo será muy denso.
+    c1_bg = c1_dark > noise_matrix 
     c2_bg = c2_dark > noise_matrix
 
     s1 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     s2 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     
-    # [cite_start]Paleta RGBCMY [cite: 2482]
+    # Paleta RGBCMY
     palette = np.array([
         [255, 0, 0], [0, 255, 0], [0, 0, 255],     
         [0, 255, 255], [255, 0, 255], [255, 255, 0]
@@ -182,10 +181,10 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
             idx_a = rand_cols[r, c, 0]
             idx_b = rand_cols[r, c, 1]
             
-            # [cite_start]--- CONSTRUCCIÓN 2 (ESTRICTA) [cite: 2611-2622] ---
-            # Mantenemos el negro puro (-1) para el contraste perfecto del secreto.
+            # --- CONSTRUCCIÓN 2 ESTRICTA ---
+            # Secreto Perfect Black (-1)
             
-            # CASO 1: Ambas son Fondo
+            # CASO 1: Ambas Fondo
             if c1_white and c2_white:
                 if sec_white:
                     row1 = [idx_a, idx_b]
@@ -221,7 +220,7 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
                     row1 = [idx_a, -1]
                     row2 = [comp_map[idx_a], -1]
 
-            # [cite_start]--- PERMUTACIÓN DE COLUMNAS [cite: 2593] ---
+            # --- PERMUTACIÓN ---
             if perms[r, c] == 1:
                 row1 = [row1[1], row1[0]]
                 row2 = [row2[1], row2[0]]
