@@ -145,7 +145,7 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     # Matemáticamente: Pixel * 0.3.
     # El blanco (255) pasa a ser ~76 (Gris muy oscuro).
     # Esto inunda el fondo de píxeles negros tras el dithering, ocultando el secreto.
-    DARKEN_FACTOR = 0.3
+    DARKEN_FACTOR = 0.2
     c1_dark = c1_gray * DARKEN_FACTOR
     c2_dark = c2_gray * DARKEN_FACTOR
     
