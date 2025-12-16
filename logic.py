@@ -141,9 +141,9 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     c1_gray = np.array(Image.fromarray(cover_arrs[0]).convert("L"))
     c2_gray = np.array(Image.fromarray(cover_arrs[1]).convert("L"))
     
-    # 2. OSCURECIMIENTO AL 70% (Factor de Luz 0.3)
-    # Matemáticamente: Pixel * 0.3.
-    # El blanco (255) pasa a ser ~76 (Gris muy oscuro).
+    # 2. OSCURECIMIENTO AL 80% (Factor de Luz 0.2)
+    # Matemáticamente: Pixel * 0.2.
+    # El blanco (255) pasa a ser ~51 (Gris muy oscuro).
     # Esto inunda el fondo de píxeles negros tras el dithering, ocultando el secreto.
     DARKEN_FACTOR = 0.2
     c1_dark = c1_gray * DARKEN_FACTOR
