@@ -118,15 +118,17 @@ def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
 # --- MÉTODO 3 (EVCS REAL) ---
 def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     """
-    Construcción 3: CBW-EVCS (Esquema Extendido) - Optimizado.
+    Construcción 3: CBW-EVCS (Esquema Extendido) - Estrategia 50% Darkening.
     
-    Solución al Ghosting:
-    1. Pre-aclarado de Coberturas: Reducimos la densidad de tinta para evitar 
-       manchas oscuras visibles en la superposición.
-    2. Floyd-Steinberg Dithering: Distribución suave de puntos.
-    3. Permutación de Columnas: Rompe patrones verticales.
+    Basado en la conclusión visual del paper (Fig. 5):
+    El fondo no debe tener "huecos blancos". Debe tener una densidad de negro
+    homogénea del 50% para camuflar la tinta de las letras.
     
-    Implementación rigurosa de Yang et al. Construcción 2.
+    Lógica:
+    1. Comprimimos el rango dinámico de las covers al 50% (Oscurecimiento).
+    2. El blanco puro se convierte en gris medio.
+    3. El dithering convierte ese gris en ruido de puntos negros dispersos.
+    4. Resultado: El fantasma desaparece en el ruido de fondo.
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
@@ -134,25 +136,32 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     if len(cover_arrs) < 2:
         raise ValueError("Este esquema requiere al menos 2 imágenes de cobertura.")
 
-    # 1. Preprocesamiento de Coberturas (Clave Anti-Ghosting)
-    c1_img = Image.fromarray(cover_arrs[0]).convert("L")
-    c2_img = Image.fromarray(cover_arrs[1]).convert("L")
+    # 1. Convertir Covers a Escala de Grises
+    c1_gray = np.array(Image.fromarray(cover_arrs[0]).convert("L"))
+    c2_gray = np.array(Image.fromarray(cover_arrs[1]).convert("L"))
     
-    # Aumentamos el brillo/gamma para reducir la cantidad de píxeles negros (tinta)
-    # Esto hace que la "imagen fantasma" sea mucho más sutil en la superposición
-    # sin perder legibilidad en la sombra individual.
-    c1_img = c1_img.point(lambda p: p * 1.5 + 50) 
-    c2_img = c2_img.point(lambda p: p * 1.5 + 50)
-
-    # Convertimos a '1' (B/N con Dithering Floyd-Steinberg)
-    # 0=Negro(Tinta), 255=Blanco(Fondo)
-    c1_bg = np.array(c1_img.convert("1")) 
-    c2_bg = np.array(c2_img.convert("1"))
+    # [cite_start]2. OSCURECIMIENTO FORZADO (FACTOR 0.5) [cite: 3115, 3150]
+    # El paper indica una transmisión de luz (lambda) del 50%.
+    # Multiplicamos por 0.5 para que el blanco (255) baje a 127.
+    # Esto asegura que el fondo tenga tanto "ruido negro" como las zonas de texto.
+    DARKEN_FACTOR = 0.5
+    c1_dark = c1_gray * DARKEN_FACTOR
+    c2_dark = c2_gray * DARKEN_FACTOR
+    
+    # 3. Dithering Probabilístico (Ruido contra Ruido)
+    # Generamos una matriz de umbral aleatorio 0-255
+    noise_matrix = rng.integers(0, 256, size=(h, w))
+    
+    # Decisión: ¿Es Fondo o Tinta?
+    # Como hemos oscurecido la imagen, incluso las zonas "blancas" tendrán
+    # un 50% de probabilidad de ser clasificadas como TINTA (Negro).
+    c1_bg = c1_dark > noise_matrix # True=Fondo, False=Tinta
+    c2_bg = c2_dark > noise_matrix
 
     s1 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     s2 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     
-    # [cite_start]Paleta Completa RGBCMY [cite: 532]
+    # [cite_start]Paleta RGBCMY [cite: 2482]
     palette = np.array([
         [255, 0, 0], [0, 255, 0], [0, 0, 255],     
         [0, 255, 255], [255, 0, 255], [255, 255, 0]
@@ -167,15 +176,16 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     for r in range(h):
         for c in range(w):
             sec_white = secret_mask[r, c]
-            c1_white = c1_bg[r, c] # True(255) si es fondo
+            c1_white = c1_bg[r, c] 
             c2_white = c2_bg[r, c] 
             
             idx_a = rand_cols[r, c, 0]
             idx_b = rand_cols[r, c, 1]
             
-            # [cite_start]--- MATRICES BASE (Yang et al. Eq 3) [cite: 533-539] ---
+            # [cite_start]--- CONSTRUCCIÓN 2 (ESTRICTA) [cite: 2611-2622] ---
+            # Mantenemos el negro puro (-1) para el contraste perfecto del secreto.
             
-            # CASO 1: Ambas Fondo (Blanco)
+            # CASO 1: Ambas son Fondo
             if c1_white and c2_white:
                 if sec_white:
                     row1 = [idx_a, idx_b]
@@ -188,7 +198,7 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
             elif c1_white and not c2_white:
                 if sec_white:
                     row1 = [idx_a, idx_b]
-                    row2 = [idx_a, -1] # -1 = Negro
+                    row2 = [idx_a, -1] 
                 else:
                     row1 = [idx_a, idx_b]
                     row2 = [comp_map[idx_a], -1]
@@ -199,7 +209,6 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
                     row1 = [idx_a, -1]
                     row2 = [idx_a, idx_b]
                 else:
-                    # Usamos 'b' para mantener variabilidad en S2
                     row1 = [idx_a, -1]
                     row2 = [comp_map[idx_a], idx_b]
 
@@ -212,7 +221,7 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
                     row1 = [idx_a, -1]
                     row2 = [comp_map[idx_a], -1]
 
-            # --- PERMUTACIÓN DE COLUMNAS ---
+            # [cite_start]--- PERMUTACIÓN DE COLUMNAS [cite: 2593] ---
             if perms[r, c] == 1:
                 row1 = [row1[1], row1[0]]
                 row2 = [row2[1], row2[0]]
