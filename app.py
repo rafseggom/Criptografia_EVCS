@@ -195,18 +195,18 @@ if st.session_state.get("generated"):
     # --- EXPLICACIONES PEDAGÓGICAS ACTUALIZADAS ---
     with st.expander("ℹ️ Detalle Matemático del Algoritmo", expanded=True):
         if "Construcción 1" in algo_selection:
-            st.markdown("""
+            st.markdown(r"""
             **Construcción 1: VCS Clásico (B/N)**
             
             Esquema (2,2) determinista con píxeles puros.
             * **Expansión:** Cada píxel del secreto se convierte en 2 subpíxeles $[p_1, p_2]$.
-            * **Seguridad:** Cada sombra tiene siempre 1 negro y 1 blanco ($p_1 \ neq p_2$), pareciendo gris uniforme.
+            * **Seguridad:** Cada sombra tiene siempre 1 negro y 1 blanco ($p_1 \neq p_2$), pareciendo gris uniforme.
             * **Recuperación:** * Blanco: $[0,1] + [0,1] \to [0,1]$ (50% luz).
                 * Negro: $[0,1] + [1,0] \to [0,0]$ (0% luz, negro total).
             """)
             
         elif "Construcción 2" in algo_selection:
-            st.markdown("""
+            st.markdown(r"""
             **Construcción 2: Color Black White - VCS (CBW)**
             
             Implementación pura del esquema (2,2) de Naor & Shamir adaptado a color.
@@ -217,7 +217,7 @@ if st.session_state.get("generated"):
             """)
             
         elif "Construcción 3" in algo_selection:
-            st.markdown("""
+            st.markdown(r"""
             **Construcción 3: CBW-EVCS (Esquema extendido)**
             
             Variante del esquema anterior que intenta preservar las imágenes de los participantes.
@@ -226,7 +226,7 @@ if st.session_state.get("generated"):
             """)
             
         elif "Construcción 4" in algo_selection:
-            st.markdown("""
+            st.markdown(r"""
             **Construcción 4: CBW-EVCS Aumentado**
             
             Esquema clásico RGB con expansión m=2.
