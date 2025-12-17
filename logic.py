@@ -274,10 +274,3 @@ def generate_basic_evcs_augmented(secret_mask, cover_arrs, *, seed=None):
                     shares[i][r, c*2 : c*2+2] = pattern
 
     return [Image.fromarray(s) for s in shares]
-
-# --- MÉTODO 5 (PLACEHOLDER) ---
-def generate_perfect_black_placeholder(secret_mask, cover_arrs):
-    """ Placeholder para Perfect Black Aumentado """
-    h, w = secret_mask.shape
-    dummy = Image.new("RGB", (w*2, h*2), (50, 50, 50)) 
-    return [dummy, dummy]

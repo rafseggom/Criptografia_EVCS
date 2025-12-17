@@ -1,88 +1,128 @@
-# EVCSdemo · Criptografía Visual Extendida (Color para secretos B/N)
+# EVCS Demo - Visual Cryptography Schemes Implementation
 
-Demo pedagógica en Streamlit que implementa esquemas de **Extended Visual Cryptography** (EVCS) para ocultar un secreto binario (B/N) dentro de sombras a color con imágenes de cobertura significativas. Incluye un visor interactivo para superponer sombras manualmente o con autoajuste.
+Este proyecto es una implementación interactiva y educacional de varios esquemas de **Criptografía Visual (VCS)** y **Criptografía Visual Extendida (EVCS)**. La aplicación permite descomponer una imagen secreta en varias "sombras" (shares) que, por separado, parecen ruido aleatorio o imágenes inocentes, pero al superponerse revelan el secreto original sin necesidad de computación digital (desencriptación por el sistema visual humano).
 
----
+Desarrollado en **Python** utilizando **Streamlit** para la interfaz y **NumPy/Pillow** para el procesamiento matricial de imágenes.
 
-## 1. ¿Qué resuelve?
-La criptografía visual clásica produce sombras con “ruido” sospechoso. EVCS permite que cada sombra sea una imagen a color con sentido (cover), manteniendo seguridad: con una sola sombra no se puede extraer el secreto.
+##  Instalación y Ejecución Local
 
----
+Sigue estos pasos para ejecutar la aplicación en tu máquina local.
 
-## 2. Cómo funciona (resumen teórico)
-- **Modelo sustractivo de color:** Las sombras actúan como filtros; el negro se logra bloqueando luz combinando colores diferentes, el “blanco” deja pasar la luz si los colores coinciden.
-- **Matrices base:** Se usan dos colecciones: una para píxeles blancos (patrones iguales entre sombras) y otra para píxeles negros (patrones complementarios). Al superponer, los negros bloquean luz y revelan el contorno del secreto.
-- **Expansión de píxel (m):** Un píxel del secreto se expande a subpíxeles en cada sombra:
-  - Construcción 1 (Básica RGB): m = 2 (horizontal), contraste estándar.
-  - Construcción 2 (Complementarios): m = 2 (horizontal), usa color y complementario para más contraste.
-  - Construcción 3 (Perfect Black): m = 4 (2×2), negros sólidos y revelado más nítido.
-- **k, n (extensión experimental en la app):** Para n≤5 se generan sombras múltiples (demo k=n). Para 2 participantes se muestran también visor y autoajuste.
+### Prerrequisitos
+* Python 3.8 o superior.
+* pip (gestor de paquetes de Python).
 
-Referencia principal: C.-N. Yang et al., “Extended color visual cryptography for black and white secret image,” *Theoretical Computer Science*, 2015.
+### Pasos
+1.  **Clonar o descargar el repositorio** con los archivos `app.py`, `logic.py`, `components.py` y `requirements.txt`.
 
----
+2.  **Instalar dependencias**:
+    Se recomienda usar un entorno virtual (`venv`).
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-## 3. Funcionalidades
-- Tema claro (apto para proyector).
-- Tres esquemas: Básico, Complementarios, Perfect Black (2 participantes).
-- Generación de sombras con imágenes de cobertura cargadas por el usuario.
-- Visor interactivo:
-  - Pestaña **2 participantes**: arrastre y botón de **Ajustar automáticamente**.
-  - Pestaña **+2 participantes**: slider de hasta 5 sombras, con visor multi-arrastre y autoajuste n y n−1.
-- Previsualización de secreto binarizado y cobertura normalizada.
+3.  **Ejecutar la aplicación**:
+    ```bash
+    streamlit run app.py
+    ```
+
+4.  La aplicación se abrirá automáticamente en tu navegador (usualmente en `http://localhost:8501`).
 
 ---
 
-## 4. Requisitos
-- Python 3.10+ (probado en Windows)
-- Paquetes: `streamlit`, `Pillow`, `numpy` (añade otros si tu entorno lo requiere)
+##  Fundamentos Teóricos y Algoritmos
+
+El proyecto implementa diferentes "Construcciones" basadas en álgebra lineal sobre cuerpos finitos y manipulación de píxeles. A continuación se detalla la lógica matemática de cada método disponible en el archivo `logic.py`.
+
+### 1. Construcción 1: VCS Clásico (Naor-Shamir, 1994)
+Es el esquema $(2,2)$ fundamental en Blanco y Negro.
+* **Lógica:** Cada píxel del secreto se expande en un bloque de $2$ subpíxeles (factor de expansión $m=2$).
+* **Matemática:**
+    * Se define una matriz base $S^0$ (para píxeles blancos) y $S^1$ (para negros).
+    * Si el píxel secreto es **Blanco (0)**: Las sombras $S_1$ y $S_2$ tienen patrones idénticos. Al superponerse (operación OR lógica), el peso de Hamming es 1 (gris visual).
+    * Si el píxel secreto es **Negro (1)**: Las sombras tienen patrones complementarios. Al superponerse, el peso de Hamming es 2 (negro total).
+    * **Seguridad:** Individualmente, cada sombra es ruido aleatorio perfectamente distribuido; no filtra información de Shannon sobre el secreto.
+
+### 2. Construcción 2: Color Black White - VCS (CBW)
+Variante del esquema anterior adaptada a color aditivo/sustractivo simulado.
+* **Lógica:** En lugar de blanco y negro puro, utiliza una paleta de 6 colores (R, G, B, C, M, Y).
+* **Funcionamiento:**
+    * Se genera un par de colores aleatorios para la Sombra 1.
+    * Si el secreto es **Blanco**, la Sombra 2 copia los colores de la Sombra 1.
+    * Si el secreto es **Negro**, la Sombra 2 selecciona el color **complementario** (ej. Rojo $\leftrightarrow$ Cian) para asegurar el máximo contraste ("negro" visual por mezcla sustractiva) al superponerse.
+
+### 3. Construcción 3: CBW-EVCS (Esquema Extendido)
+Este es el algoritmo más complejo (basado en *Yang et al.*). A diferencia de los anteriores, las sombras no son ruido, sino que muestran imágenes visibles ("Covers") para engañar a un censor.
+* **Matrices de Acceso:** El algoritmo decide el color de los subpíxeles basándose en 3 bits de entrada para cada posición $(x,y)$:
+    1.  Bit del Secreto.
+    2.  Bit de la Imagen de Cobertura 1.
+    3.  Bit de la Imagen de Cobertura 2.
+* **Prevención de Ghosting (Ajuste Gamma):**
+    En `logic.py`, se aplica una transformación a las imágenes de cobertura antes de procesarlas: `pixel = pixel * 1.5 + 50`.
+    * *¿Por qué?* Si las coberturas son muy oscuras (mucha tinta), interferirán con el secreto recuperado. Al aclararlas y reducir su densidad, el secreto (que es negro puro al recuperarse) resalta sobre el "ruido" de las coberturas.
+* **Permutación de Columnas:** Para evitar artefactos visuales verticales, las columnas dentro de cada bloque de expansión se permutan aleatoriamente.
+
+### 4. Construcción 4 — CBW‑EVCS Aumentado (Propuesta propia)
+
+Esta construcción es una extensión práctica y experimental inspirada en la Construcción 3 (Yang et al.) pero diseñada para trabajar con imágenes de cobertura “reales” y dividir la carga visual entre N participantes.
+
+- Propósito: permitir que cada participante suba una imagen grande y “realista” (fotografías, logos, páginas) y obtener N sombras que sean individuales y legibles, pero que al superponerse revelen el secreto con alto contraste.
+- Idea principal (cómo mejora la Construcción 3):
+  - Cada píxel secreto se expande horizontalmente (m=2) y se decide localmente según tres fuentes: secreto, preferencia local de cada cover (texto vs fondo) y la necesidad de mantener el secreto oscuro en la superposición.
+  - Para píxeles de fondo (secreto blanco): distribuir colores entre participantes por paridad (por ejemplo, participantes pares obtienen el color y los impares blanco, o viceversa). Esta paridad hace que las contribuciones tiendan a cancelarse visualmente en la superposición, manteniendo el fondo “no-negro”.
+  - Para píxeles de secreto (negro): asignar patrones coherentes entre todos los participantes (mismo patrón) para acumular “tinta” y producir negro puro al overlay.
+  - Anti‑ghosting: combinación de pre‑aclarado de covers, dithering y permutación aleatoria de subcolumnas para reducir que una cover “se vea” dentro de otra tras superponer.
+- Ventajas:
+  - Escala a N participantes (cada cover aporta su propia sombra).
+  - Funciona con imágenes grandes y con texturas reales (no requiere covers artificiales).
+  - Reduce ghosting respecto a un simple mapeo color/compl.
+- Limitaciones y notas:
+  - Es una proposición práctica — parámetros (preaclarado, paleta, política de paridad) son heurísticos y pueden ajustarse según dataset.
+  - El secreto solo es 100% fiable donde la lógica obliga a producir negro puro (complementarios); en regiones mixtas la visibilidad depende de la combinación de covers.
+  - Recomendado probar con coberturas que tengan zonas claras/oscuras separadas para maximizar contraste con el secreto.
 
 ---
 
-## 5. Instalación y ejecución local
-1) Crea y activa un entorno (opcional, recomendado).
-2) Instala dependencias:
-```bash
-pip install streamlit pillow numpy
-```
-3) Ejecuta la app:
-```bash
-streamlit run app.py
-```
-4) Abre el enlace local que muestra Streamlit (por defecto http://localhost:8501).
+## Resumen mejorado de las demás construcciones
+
+- Construcción 1 — VCS clásico (Naor–Shamir, 2,2):
+  - B/N puro, expansión m=2, seguridad teórica: cada sombra individual no filtra información del secreto.
+  - Uso: casos pedagógicos y secretos estrictamente binarios.
+
+- Construcción 2 — CBW (6 colores: R,G,B,C,M,Y):
+  - Versión a color del (2,2): usa pares complementarios para generar negro por mezcla sustractiva.
+  - Uso: cuando se quiere contraste fuerte en color; exige 2 sombras.
+
+- Construcción 3 — CBW‑EVCS (Yang et al., adaptado):
+  - Permite sombras que muestran imágenes (covers) y revelan secreto en la superposición.
+  - Técnicas clave: pre‑aclarado de covers (reduce tinta), Floyd–Steinberg dithering y permutación de subcolumnas.
+  - Objetivo: mantener las coberturas legibles en sus sombras, minimizar ghosting y asegurar que el secreto sea dominante en el overlay.
+
+- Construcción 4 — (ver arriba): propuesta propia para N participantes y coberturas realistas.
+
+- Construcción 5 — Perfect Black (experimental):
+  - Versión con expansión 2×2 para fortalecer negro puro; actualmente experimental/placeholder.
 
 ---
 
-## 6. Uso rápido
-1) Sube la imagen **Secreto B/N** y la **Cobertura** (color).
-2) Elige la **Construcción** y el **Tamaño base**.
-3) En la pestaña **2 participantes**, pulsa **Generar sombras (2)** y usa la demostración.
-4) En **+2 participantes**, selecciona n (3–5) y pulsa **Generar sombras (n participantes)**; usa el laboratorio para mover/autoajustar.
+##  Dithering — explicación práctica y motivo de uso
+
+- Método usado: `PIL.Image.convert("1")` → Floyd–Steinberg por defecto en Pillow.
+- Por qué: convierte tonos continuos en patrones B/N que el ojo integra como gradientes, preservando bordes y detalles finos tras binarizar. Reduce artefactos que aparecen con un umbral fijo y mejora la legibilidad de secretos y covers tras la generación de sombras.
+- Cuándo desactivarlo: si tus entradas ya son binarias (estrictamente B/N) o si quieres un comportamiento determinista sin textura de dithering.
 
 ---
 
-## 7. Estructura del repo (principal)
-- `app.py` — UI Streamlit, pestañas de 2 y n participantes, autoajuste.
-- `logic.py` — Preparación de imágenes, generadores de sombras para 2 y multi.
-- `components.py` — Visores HTML (drag/drop, autoajuste).
-- `resumen.md` — Resumen técnico del paper.
-- `README.md` — Este documento.
+##  Estructura del Proyecto
+
+* **`app.py`**: Controlador principal. Maneja la interfaz de Streamlit, la subida de archivos, la selección de algoritmos y la orquestación del flujo.
+* **`logic.py`**: El "cerebro" matemático. Contiene las funciones puras que transforman las matrices de imágenes (`generate_bw_vcs`, `generate_evcs_colored`, etc.).
+* **`components.py`**: Utilidades de Frontend. Inyecta HTML y JavaScript personalizado para permitir la **demo interactiva de arrastrar y soltar** (Drag & Drop) dentro de Streamlit, permitiendo al usuario probar la superposición manualmente.
+
+##  Notas de Uso
+* Para los métodos extendidos (Construcción 3), es crucial subir imágenes de cobertura con buen contraste.
+* La "Inversión del secreto" es útil si tu imagen original tiene fondo negro y letras blancas, ya que el algoritmo suele asumir que la información importante es la oscura (tinta).
+* Recomendamos usar las imágenes de la carpeta _media_ ya que estan pensadas para facilitar el uso de la aplicación.
 
 ---
-
-## 8. Limitaciones actuales
-- Perfect Black solo en modo 2 participantes.
-- La demo multiusa un esquema básico extendido (k=n). El contraste puede variar según n y covers.
-- No se incluyen matrices optimizadas para todos los (k, n); foco pedagógico.
-
----
-
-## 9. Despliegue
-- Local: `streamlit run app.py`.
-- Streamlit Community Cloud: sube a GitHub y crea la app en https://share.streamlit.io.
-- Otros PaaS: configura el entrypoint apuntando a `streamlit run app.py`.
-
----
-
-## 10. Créditos
-Implementación basada en la idea de **Extended Color Visual Cryptography** (Yang et al., 2015) adaptada a una demo educativa con Streamlit.
+*Proyecto realizado con fines académicos sobre seguridad visual y esteganografía.*

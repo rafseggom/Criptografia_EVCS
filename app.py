@@ -48,7 +48,6 @@ with col_b:
                 "Construcción 2: Color Black White - VCS (CBW)",
                 "Construcción 3: CBW-EVCS (Esquema extendido)",
                 "Construcción 4: CBW-EVCS aumentado",
-                "Construcción 5: CBW-EVCS Aumentado Perfect Black",
             ),
             index=0,
             label_visibility="collapsed"
@@ -105,12 +104,6 @@ with col_b:
         <b>CBW Aumentado</b><br><br>
         Evolución del esquema estándar RGB. Aplica rotación de canales de color en el 
         píxel negro para aumentar la oscuridad resultante.
-        """,
-        
-        "Construcción 5": """
-        <b>Perfect Black (Experimental)</b><br><br>
-        <b>En Desarrollo</b><br>
-        Versión avanzada con expansión matricial 2x2.
         """
     }
 
@@ -205,11 +198,7 @@ def _generate_multi():
             
         elif "Construcción 4" in algo_selection:
             shares = logic.generate_basic_evcs_augmented(mask, cover_arrs)
-            
-        elif "Construcción 5" in algo_selection:
-            st.warning("Método no implementado.")
-            shares = logic.generate_perfect_black_placeholder(mask, cover_arrs)
-    
+        
     st.session_state.update({
         "secret_prev": secret_preview,
         "shares": shares,
