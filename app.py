@@ -54,15 +54,18 @@ with col_b:
             label_visibility="collapsed"
         )
         
-        st.write("") 
-        size = st.slider("Tamaño base (px)", 320, 900, 640, step=40)
+        
 
         # --- SLIDER N (Solo para Métodos 1 y 2) ---
         n_manual = 2
         if "Construcción 1" in algo_selection or "Construcción 2" in algo_selection:
             st.write("")
             n_manual = st.slider("Número de Sombras (N)", min_value=2, max_value=5, value=2)
-
+            st.caption("⚠️ Nota: El algoritmo está mejor optimizado para n=2.")
+            
+        st.write("") 
+        size = st.slider("Tamaño base (px)", 320, 900, 640, step=40)
+            
         # --- SLIDER DARKEN FACTOR (Solo Método 3) ---
         darken_factor = 0.2
         if "Construcción 3" in algo_selection:
