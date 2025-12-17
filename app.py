@@ -107,11 +107,6 @@ with col_b:
         píxel negro para aumentar la oscuridad resultante.
         """,
         
-        "Construcción 5": """
-        <b>Perfect Black (Experimental)</b><br><br>
-        <b>En Desarrollo</b><br>
-        Versión avanzada con expansión matricial 2x2.
-        """
     }
 
     current_key = next((k for k in info_texts if k in algo_selection), "Construcción 1")
@@ -206,9 +201,6 @@ def _generate_multi():
         elif "Construcción 4" in algo_selection:
             shares = logic.generate_basic_evcs_augmented(mask, cover_arrs)
             
-        elif "Construcción 5" in algo_selection:
-            st.warning("Método no implementado.")
-            shares = logic.generate_perfect_black_placeholder(mask, cover_arrs)
     
     st.session_state.update({
         "secret_prev": secret_preview,

@@ -14,7 +14,10 @@ def prepare_inputs(secret_file, cover_file, *, invert=False, size=640, dither=Tr
     else:
         secret_bw = secret.point(lambda x: 255 if x >= 128 else 0, mode="1")
 
-    cover = Image.open(cover_file).convert("RGB").resize((size, size))
+    if cover_file is None:
+        cover = Image.new("RGB", (size, size), (0, 0, 0))
+    else:
+        cover = Image.open(cover_file).convert("RGB").resize((size, size))
     
     secret_mask = np.array(secret_bw, dtype=bool) 
     cover_arr = np.array(cover, dtype=np.uint8)
@@ -23,136 +26,159 @@ def prepare_inputs(secret_file, cover_file, *, invert=False, size=640, dither=Tr
 
 
 def overlay(share1, share2):
-    """ Simulación de superposición (Multiply). No tocar. """
+    """ Simulación de superposición (Multiply). """
     return ImageChops.multiply(share1.convert("RGB"), share2.convert("RGB"))
 
 
-# --- MÉTODO 1 ---
+# --- MÉTODO 1 (REAL 2-out-of-N) ---
 def generate_bw_vcs(secret_mask, cover_arrs, *, seed=None):
     """
-    Construcción 1: VCS - Black and White.
-    Implementación clásica de Naor & Shamir (2,2) monocromática.
+    Construcción 1: VCS - Black and White (Esquema Real 2-out-of-N).
     
-    Lógica:
-    - Expansión de píxel m=2 (1x2).
-    - S1 siempre es un patrón aleatorio equilibrado (1 negro, 1 blanco).
-    - Si secreto es BLANCO: S2 es IDÉNTICA a S1.
-    - Si secreto es NEGRO: S2 es COMPLEMENTARIA a S1.
+    Implementación genuina con expansión m=N.
+    - Secreto Blanco: Todas las sombras comparten la MISMA posición para el píxel negro.
+      (Apilar 2 o más = 1 Negro).
+    - Secreto Negro: Cada sombra tiene su píxel negro en una posición ÚNICA.
+      (Apilar 2 = 2 Negros, más oscuro).
+      
+    Garantiza que S1 y S3 sean distintas (especialmente en zonas negras).
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
+    n = len(cover_arrs) 
     
-    if len(cover_arrs) != 2:
-        raise ValueError("VCS B/N requiere exactamente 2 participantes.")
+    if n < 2:
+        raise ValueError("VCS requiere al menos 2 participantes.")
 
-    # 1. Generar la matriz base para Sombra 1 (S1)
-    s1_left = rng.integers(0, 2, size=(h, w), dtype=np.bool_)
-    s1_right = ~s1_left 
+    # 1. Creamos N matrices vacías (Blanco = 255) de tamaño H x (W*N)
+    # Inicializamos a 255 (BLANCO)
+    shares_arr = [np.ones((h, w * n), dtype=np.uint8) * 255 for _ in range(n)]
     
-    # 2. Calcular Sombra 2 (S2) basada en el Secreto
-    s2_left = np.zeros((h, w), dtype=np.bool_)
-    s2_right = np.zeros((h, w), dtype=np.bool_)
-    
-    # CASO A: Secreto Blanco (True) -> S2 igual a S1
-    s2_left[secret_mask]  = s1_left[secret_mask]
-    s2_right[secret_mask] = s1_right[secret_mask]
-    
-    # CASO B: Secreto Negro (False) -> S2 inversa a S1
-    s2_left[~secret_mask]  = ~s1_left[~secret_mask]
-    s2_right[~secret_mask] = ~s1_right[~secret_mask]
-
-    # 3. Construir las imágenes finales expandidas
-    share1_img = np.zeros((h, w * 2), dtype=np.uint8)
-    share2_img = np.zeros((h, w * 2), dtype=np.uint8)
-    
-    share1_img[:, 0::2] = s1_left.astype(np.uint8) * 255
-    share1_img[:, 1::2] = s1_right.astype(np.uint8) * 255
-    
-    share2_img[:, 0::2] = s2_left.astype(np.uint8) * 255
-    share2_img[:, 1::2] = s2_right.astype(np.uint8) * 255
-    
-    return [Image.fromarray(share1_img).convert("RGB"), 
-            Image.fromarray(share2_img).convert("RGB")]
-
-
-# --- MÉTODO 2 (ANTIGUO 4) ---
-def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
-    """
-    Construcción 2: Color Black White - VCS (CBW).
-    Basado en Naor-Shamir (2,2) con paleta RGBCMY.
-    """
-    rng = np.random.default_rng(seed)
-    h, w = secret_mask.shape
-    
-    if len(cover_arrs) != 2:
-        raise ValueError("CBW requiere exactamente 2 participantes.")
-    
-    shares = [np.zeros((h, w * 2, 3), dtype=np.uint8) for _ in range(2)]
-    
-    palette = [
-        [255, 0, 0], [0, 255, 0], [0, 0, 255],     
-        [0, 255, 255], [255, 0, 255], [255, 255, 0]
-    ]
-    comp_map = {0: 3, 1: 4, 2: 5, 3: 0, 4: 1, 5: 2}
-    palette_arr = np.array(palette, dtype=np.uint8)
+    # 2. Generamos permutaciones aleatorias para cada píxel
+    # Esto decide las 'ranuras' de 0 a N-1 disponibles en cada bloque
+    perms = np.argsort(rng.random((h, w, n)), axis=2)
 
     for r in range(h):
         for c in range(w):
-            idx_1a = rng.integers(0, 6)
-            idx_1b = rng.integers(0, 6)
+            p_indices = perms[r, c] # Array de índices [0, 2, 1...] desordenados
             
-            shares[0][r, c*2]     = palette_arr[idx_1a]
-            shares[0][r, c*2 + 1] = palette_arr[idx_1b]
-            
-            if secret_mask[r, c]:  # Blanco -> Idéntico
-                idx_2a, idx_2b = idx_1a, idx_1b
-            else:  # Negro -> Complementario
-                idx_2a, idx_2b = comp_map[idx_1a], comp_map[idx_1b]
-            
-            shares[1][r, c*2]     = palette_arr[idx_2a]
-            shares[1][r, c*2 + 1] = palette_arr[idx_2b]
+            if secret_mask[r, c]: 
+                # CASO BLANCO (Fondo/Transparente):
+                # Regla (2,N): Todos comparten la misma 'columna negra'.
+                # Elegimos la primera ranura de la permutación p_indices[0].
+                k = p_indices[0]
+                for i in range(n):
+                    shares_arr[i][r, c*n + k] = 0 # Pintamos NEGRO
+                    # El resto de ranuras se quedan en BLANCO (255)
+            else:
+                # CASO NEGRO (Secreto):
+                # Regla (2,N): Cada participante 'i' pone negro en una ranura DISTINTA.
+                # Usamos p_indices[i] para asegurar unicidad.
+                for i in range(n):
+                    k = p_indices[i]
+                    shares_arr[i][r, c*n + k] = 0 # Pintamos NEGRO
 
-    return [Image.fromarray(s) for s in shares]
+    return [Image.fromarray(s).convert("RGB") for s in shares_arr]
 
 
-# --- MÉTODO 3 (EVCS REAL) ---
-def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
+# --- MÉTODO 2 (COLOR 2-out-of-N) ---
+def generate_simple_6color(secret_mask, cover_arrs, *, seed=None):
     """
-    Construcción 3: CBW-EVCS (Esquema Extendido) - Optimizado.
+    Construcción 2: CBW (Color Black White) - Real 2-out-of-N.
     
-    Solución al Ghosting:
-    1. Pre-aclarado de Coberturas: Reducimos la densidad de tinta para evitar 
-       manchas oscuras visibles en la superposición.
-    2. Floyd-Steinberg Dithering: Distribución suave de puntos.
-    3. Permutación de Columnas: Rompe patrones verticales.
+    Solución al problema "S1 es igual a S3":
+    Utilizamos un esquema híbrido de Densidad + Ruido de Color.
+    - Expansión m=N.
+    - Marca de contraste: NEGRO (para asegurar la decodificación visual).
+    - Relleno: COLORES ALEATORIOS (RGBCMY).
     
-    Implementación rigurosa de Yang et al. Construcción 2.
+    Al usar relleno aleatorio, incluso si dos sombras coinciden en la posición
+    de la marca negra (caso blanco), sus píxeles de relleno serán de colores
+    distintos. S1 y S3 serán visualmente únicas.
     """
     rng = np.random.default_rng(seed)
     h, w = secret_mask.shape
+    n = len(cover_arrs)
+    
+    if n < 2:
+        raise ValueError("CBW requiere al menos 2 participantes.")
+    
+    shares_arr = [np.zeros((h, w * n, 3), dtype=np.uint8) for _ in range(n)]
+    
+    palette = np.array([
+        [255, 0, 0], [0, 255, 0], [0, 0, 255],     
+        [0, 255, 255], [255, 0, 255], [255, 255, 0]
+    ], dtype=np.uint8)
+    
+    black_pixel = np.array([0, 0, 0], dtype=np.uint8)
 
-    if len(cover_arrs) < 2:
+    # Permutaciones para posiciones
+    perms = np.argsort(rng.random((h, w, n)), axis=2)
+    
+    # Colores aleatorios para relleno (Noise)
+    # Generamos una matriz gigante de índices de color aleatorios
+    rand_colors = rng.integers(0, 6, size=(n, h, w * n))
+
+    for r in range(h):
+        for c in range(w):
+            p_indices = perms[r, c]
+            
+            # 1. Rellenar TODO el bloque con colores aleatorios (Ruido base)
+            # Esto garantiza que S1 y S3 sean distintas siempre.
+            for i in range(n):
+                for k in range(n): # Llenamos los N subpíxeles
+                    col_idx = rand_colors[i, r, c*n + k]
+                    shares_arr[i][r, c*n + k] = palette[col_idx]
+            
+            # 2. Aplicar la Lógica de Secreto (Sobrescribir con MARCA NEGRA)
+            if secret_mask[r, c]: 
+                # CASO BLANCO (Secreto Transparente)
+                # Todos coinciden en la marca negra en la posición k.
+                k_pos = p_indices[0]
+                for i in range(n):
+                    shares_arr[i][r, c*n + k_pos] = black_pixel
+            else:
+                # CASO NEGRO (Secreto Opaco)
+                # Cada uno pone marca negra en posición distinta k_i.
+                # Al superponer S1+S2 -> 2 marcas negras (Más oscuro).
+                for i in range(n):
+                    k_pos = p_indices[i]
+                    shares_arr[i][r, c*n + k_pos] = black_pixel
+
+    return [Image.fromarray(s) for s in shares_arr]
+
+
+# --- MÉTODO 3 (EVCS) ---
+def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None, darken_factor=0.2):
+    """
+    Construcción 3: CBW-EVCS.
+    Nota: Este método es inherentemente (2,2) por la matemática de matrices de Yang.
+    Si N > 2, usamos distribución cíclica de pares (S1, S2, S1...)
+    porque generalizar EVCS a (2,N) requiere resolver sistemas lineales complejos
+    fuera del alcance de esta demo.
+    """
+    rng = np.random.default_rng(seed)
+    h, w = secret_mask.shape
+    n = len(cover_arrs)
+
+    if n < 2:
         raise ValueError("Este esquema requiere al menos 2 imágenes de cobertura.")
 
-    # 1. Preprocesamiento de Coberturas (Clave Anti-Ghosting)
-    c1_img = Image.fromarray(cover_arrs[0]).convert("L")
-    c2_img = Image.fromarray(cover_arrs[1]).convert("L")
+    # Procesamos solo las 2 primeras covers para generar el par base
+    c1_gray = np.array(Image.fromarray(cover_arrs[0]).convert("L"))
+    c2_gray = np.array(Image.fromarray(cover_arrs[1]).convert("L"))
     
-    # Aumentamos el brillo/gamma para reducir la cantidad de píxeles negros (tinta)
-    # Esto hace que la "imagen fantasma" sea mucho más sutil en la superposición
-    # sin perder legibilidad en la sombra individual.
-    c1_img = c1_img.point(lambda p: p * 1.5 + 50) 
-    c2_img = c2_img.point(lambda p: p * 1.5 + 50)
-
-    # Convertimos a '1' (B/N con Dithering Floyd-Steinberg)
-    # 0=Negro(Tinta), 255=Blanco(Fondo)
-    c1_bg = np.array(c1_img.convert("1")) 
-    c2_bg = np.array(c2_img.convert("1"))
+    c1_dark = c1_gray * darken_factor
+    c2_dark = c2_gray * darken_factor
+    
+    noise_matrix = rng.integers(0, 256, size=(h, w))
+    
+    c1_bg = c1_dark > noise_matrix 
+    c2_bg = c2_dark > noise_matrix
 
     s1 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     s2 = np.zeros((h, w * 2, 3), dtype=np.uint8)
     
-    # [cite_start]Paleta Completa RGBCMY [cite: 532]
     palette = np.array([
         [255, 0, 0], [0, 255, 0], [0, 0, 255],     
         [0, 255, 255], [255, 0, 255], [255, 255, 0]
@@ -167,67 +193,52 @@ def generate_evcs_colored(secret_mask, cover_arrs, *, seed=None):
     for r in range(h):
         for c in range(w):
             sec_white = secret_mask[r, c]
-            c1_white = c1_bg[r, c] # True(255) si es fondo
+            c1_white = c1_bg[r, c] 
             c2_white = c2_bg[r, c] 
             
             idx_a = rand_cols[r, c, 0]
             idx_b = rand_cols[r, c, 1]
             
-            # [cite_start]--- MATRICES BASE (Yang et al. Eq 3) [cite: 533-539] ---
-            
-            # CASO 1: Ambas Fondo (Blanco)
             if c1_white and c2_white:
                 if sec_white:
-                    row1 = [idx_a, idx_b]
-                    row2 = [idx_a, idx_b]
+                    row1 = [idx_a, idx_b]; row2 = [idx_a, idx_b]
                 else:
-                    row1 = [idx_a, idx_b]
-                    row2 = [comp_map[idx_a], comp_map[idx_b]]
-
-            # CASO 2: C1 Fondo, C2 Tinta
+                    row1 = [idx_a, idx_b]; row2 = [comp_map[idx_a], comp_map[idx_b]]
             elif c1_white and not c2_white:
                 if sec_white:
-                    row1 = [idx_a, idx_b]
-                    row2 = [idx_a, -1] # -1 = Negro
+                    row1 = [idx_a, idx_b]; row2 = [idx_a, -1] 
                 else:
-                    row1 = [idx_a, idx_b]
-                    row2 = [comp_map[idx_a], -1]
-
-            # CASO 3: C1 Tinta, C2 Fondo
+                    row1 = [idx_a, idx_b]; row2 = [comp_map[idx_a], -1]
             elif not c1_white and c2_white:
                 if sec_white:
-                    row1 = [idx_a, -1]
-                    row2 = [idx_a, idx_b]
+                    row1 = [idx_a, -1]; row2 = [idx_a, idx_b]
                 else:
-                    # Usamos 'b' para mantener variabilidad en S2
-                    row1 = [idx_a, -1]
-                    row2 = [comp_map[idx_a], idx_b]
-
-            # CASO 4: Ambas Tinta
+                    row1 = [idx_a, -1]; row2 = [comp_map[idx_a], idx_b]
             else:
                 if sec_white:
-                    row1 = [idx_a, -1]
-                    row2 = [idx_a, -1]
+                    row1 = [idx_a, -1]; row2 = [idx_a, -1]
                 else:
-                    row1 = [idx_a, -1]
-                    row2 = [comp_map[idx_a], -1]
+                    row1 = [idx_a, -1]; row2 = [comp_map[idx_a], -1]
 
-            # --- PERMUTACIÓN DE COLUMNAS ---
             if perms[r, c] == 1:
                 row1 = [row1[1], row1[0]]
                 row2 = [row2[1], row2[0]]
 
-            # --- PINTADO ---
             def get_rgb(code):
                 return black_pixel if code == -1 else palette[code]
 
             s1[r, c*2]   = get_rgb(row1[0])
             s1[r, c*2+1] = get_rgb(row1[1])
-            
             s2[r, c*2]   = get_rgb(row2[0])
             s2[r, c*2+1] = get_rgb(row2[1])
 
-    return [Image.fromarray(s1), Image.fromarray(s2)]
+    # Para EVCS, si N > 2, repetimos el par base (limitación matemática)
+    base_imgs = [Image.fromarray(s1), Image.fromarray(s2)]
+    final_shares = []
+    for i in range(n):
+        final_shares.append(base_imgs[i % 2])
+
+    return final_shares
 
 # --- MÉTODO 4 ---
 def generate_basic_evcs_augmented(secret_mask, cover_arrs, *, seed=None):
@@ -275,9 +286,3 @@ def generate_basic_evcs_augmented(secret_mask, cover_arrs, *, seed=None):
 
     return [Image.fromarray(s) for s in shares]
 
-# --- MÉTODO 5 (PLACEHOLDER) ---
-def generate_perfect_black_placeholder(secret_mask, cover_arrs):
-    """ Placeholder para Perfect Black Aumentado """
-    h, w = secret_mask.shape
-    dummy = Image.new("RGB", (w*2, h*2), (50, 50, 50)) 
-    return [dummy, dummy]
