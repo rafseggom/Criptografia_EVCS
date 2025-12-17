@@ -32,8 +32,16 @@ col_a, col_b = st.columns([1, 1], gap="large")
 with col_a:
     st.subheader("Secreto")
     secret_file = st.file_uploader("Imagen de secreto B/N", type=["png", "jpg", "jpeg"], key="secret_in")
-    invert_secret = st.checkbox("Invertir secreto", value=False)
-    dither = st.checkbox("Dithering suave (recomendado)", value=True)
+    invert_secret = st.checkbox(
+        "Invertir secreto",
+        value=False,
+        help="Convierte los blancos del secreto en negro y viceversa."
+    )
+    dither = st.checkbox(
+        "Dithering suave (recomendado)",
+        value=True,
+        help="Activa o desactiva el suavizado de bordes mediante dithering (Floyd–Steinberg)."
+    )
 
 with col_b:
     st.subheader("Configuración del Algoritmo")
