@@ -63,7 +63,19 @@ with col_b:
             st.caption("⚠️ Nota: El algoritmo está mejor optimizado para n=2.")
             
         st.write("") 
-        size = st.slider("Tamaño base (px)", 320, 900, 640, step=40)
+
+        size_help = "Define el ancho de la imagen procesada. La altura se ajusta proporcionalmente. A más alto mayor calidad, pero más tiempo de procesamiento."
+
+        # Sliders de tamaño específicos por método (aviso incluido)
+        if "Construcción 1" in algo_selection:
+            size = st.slider("Tamaño base (px) — Método 1", 320, 900, 640, step=40, help=size_help, key="size_m1")
+        elif "Construcción 2" in algo_selection:
+            size = st.slider("Tamaño base (px) — Método 2", 320, 900, 640, step=40, help=size_help, key="size_m2")
+        elif "Construcción 4" in algo_selection:
+            size = st.slider("Tamaño base (px) — Método 4", 320, 900, 640, step=40, help=size_help, key="size_m4")
+        else:
+            # Método 3 u otros: slider genérico con el mismo aviso
+            size = st.slider("Tamaño base (px)", 320, 900, 640, step=40, help=size_help, key="size_default")
             
         # --- SLIDER DARKEN FACTOR (Solo Método 3) ---
         darken_factor = 0.2
@@ -75,8 +87,9 @@ with col_b:
                 max_value=1.0, 
                 value=0.2, 
                 step=0.05,
-                help="Controla la densidad de ruido en el fondo."
+                help="Controla la densidad de ruido en el fondo. Valores más bajos generan sombras más oscuras."
             )
+            st.caption("⚠️ Nota: Punto optimo de luminosidad: entre 20 y 30%.")
 
     info_texts = {
         "Construcción 1": """
