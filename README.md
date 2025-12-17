@@ -83,27 +83,22 @@ Esta construcción es una extensión práctica y experimental inspirada en la Co
 
 ---
 
-## Resumen mejorado de las demás construcciones
+## Resumen de las construcciones
 
-- Construcción 1 — VCS clásico (Naor–Shamir, 2,2):
+- **Construcción 1** — VCS clásico (Naor–Shamir, 2,2):
   - B/N puro, expansión m=2, seguridad teórica: cada sombra individual no filtra información del secreto.
   - Uso: casos pedagógicos y secretos estrictamente binarios.
 
-- Construcción 2 — CBW (6 colores: R,G,B,C,M,Y):
+- **Construcción 2** — CBW (6 colores: R,G,B,C,M,Y):
   - Versión a color del (2,2): usa pares complementarios para generar negro por mezcla sustractiva.
   - Uso: cuando se quiere contraste fuerte en color; exige 2 sombras.
 
-- Construcción 3 — CBW‑EVCS (Yang et al., adaptado):
+- **Construcción 3** — CBW‑EVCS (Yang et al., adaptado):
   - Permite sombras que muestran imágenes (covers) y revelan secreto en la superposición.
   - Técnicas clave: pre‑aclarado de covers (reduce tinta), Floyd–Steinberg dithering y permutación de subcolumnas.
   - Objetivo: mantener las coberturas legibles en sus sombras, minimizar ghosting y asegurar que el secreto sea dominante en el overlay.
 
-- Construcción 4 — (ver arriba): propuesta propia para N participantes y coberturas realistas.
-
-- Construcción 5 — Perfect Black (experimental):
-  - Versión con expansión 2×2 para fortalecer negro puro; actualmente experimental/placeholder.
-
----
+- **Construcción** 4 : propuesta propia para N participantes y coberturas realistas.
 
 ##  Dithering — explicación práctica y motivo de uso
 
