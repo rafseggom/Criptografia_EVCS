@@ -121,3 +121,7 @@ Esta construcción es una extensión práctica y experimental inspirada en la Co
 
 ---
 *Proyecto realizado con fines académicos sobre seguridad visual y esteganografía.*
+
+## Licencia
+
+Este proyecto está liberado bajo la licencia MIT. Si usas o redistribuyes este código, por favor conserva el aviso de copyright original y da crédito a Rafael Segura y/o Nerea Jiménez.
